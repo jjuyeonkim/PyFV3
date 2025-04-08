@@ -8,6 +8,7 @@ from pyFV3.dycore_state import DycoreState
 
 class Cases(Enum, metaclass=MetaEnumStr):
     baroclinic = "baroclinic"
+    rhwave = "rhwave"
     tropicalcyclone = "tropicalcyclone"
 
 
@@ -55,6 +56,17 @@ def init_analytic_state(
             assert isinstance(comm, CubedSphereCommunicator)
 
             return tc.init_tc_state(
+                grid_data=grid_data,
+                quantity_factory=quantity_factory,
+                hydrostatic=hydrostatic,
+                comm=comm,
+            )
+        elif analytic_init_case == Cases.rhwave.value:  # type: ignore # JK TODO: What does this type: ignore mean?
+            import pyFV3.initialization.test_cases.initialize_rhwave as rhwave
+
+            assert isinstance(comm, CubedSphereCommunicator)
+
+            return rhwave.init_rhwave_state(
                 grid_data=grid_data,
                 quantity_factory=quantity_factory,
                 hydrostatic=hydrostatic,
