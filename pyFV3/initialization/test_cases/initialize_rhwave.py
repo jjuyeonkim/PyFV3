@@ -223,12 +223,7 @@ def postinit_for_all_sw(state):
       endif
     '''
 
-    ''' TODO: Is this right?
-      do z=2,npz
-         delp(:,:,z) = delp(:,:,1)
-      enddo
-    '''
-    state.delp[:,:,1:] = state.delp[:,:,0][:,:,np.newaxis] # TODO: Is this right?
+    state.delp[:,:,1:] = state.delp[:,:,0][:,:,np.newaxis]
     
     ''' TODO: Can I ignore these mpp_update_domains calls?
       call mpp_update_domains( delp, domain )
@@ -240,12 +235,11 @@ def postinit_for_all_sw(state):
 
       call init_winds(UBar, u,v,ua,va,uc,vc, initWindsCase, npx, npy, ng, ndims, nregions, gridstruct%bounded_domain, gridstruct, domain, tile, bd)
 ! Copy 3D data for Shallow Water Tests
-      do z=2,npz
-         u(:,:,z) = u(:,:,1)
-         v(:,:,z) = v(:,:,1)
-      enddo
     '''
-    state.u[:,:,1:] = state.u[:,:,0][:,:,np.newaxis] # TODO: Is this right?
+
+    state.u[:,:,1:] = state.u[:,:,0][:,:,np.newaxis]
+    state.v[:,:,1:] = state.v[:,:,0][:,:,np.newaxis]
+    
     '''
 
       do j=js,je
@@ -279,19 +273,14 @@ def init_rhwave_state(
     Returns:
         DycoreState
     """
-    # TODO: What exactly is this? Found in both tc and baroclinic inits.
     sample_quantity = grid_data.lat
     shape = (*sample_quantity.data.shape[0:2], grid_data.ak.data.shape[0])
     numpy_state = init_utils.empty_numpy_dycore_state(shape)
 
-    #print(f"***MAIN A*** numpy_state.delp[:,:,1] ({numpy_state.delp[:,:,1].shape})\n{numpy_state.delp[:,:,1]}")
     preinit_for_all_sw(numpy_state, shape, grid_data)
-    #print(f"***MAIN B*** numpy_state.delp[:,:,1] ({numpy_state.delp[:,:,1].shape})\n{numpy_state.delp[:,:,1]}")
     init_for_rhwave(numpy_state, grid_data)
-    #print(f"***MAIN C*** numpy_state.delp[:,:,1] ({numpy_state.delp[:,:,1].shape})\n{numpy_state.delp[:,:,1]}")
-    #postinit_for_all_sw(numpy_state)
+    postinit_for_all_sw(numpy_state)
 
-    # TODO: Actual DycoreState init
     state = DycoreState.init_from_numpy_arrays(
         numpy_state.__dict__,
         sizer=quantity_factory.sizer,
