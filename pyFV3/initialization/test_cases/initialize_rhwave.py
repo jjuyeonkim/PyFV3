@@ -10,6 +10,9 @@ from ndsl.grid.gnomonic import great_circle_distance_lon_lat, lon_lat_midpoint
 from pyFV3.dycore_state import DycoreState
 from pyFV3.initialization import init_utils
 
+NHALO = constants.N_HALO_DEFAULT # TODO: Where to put this?
+SURFACE_PRESSURE = 1.0e5  # units of (Pa), from Table VI of DCMIP2016 #TODO: where to put this?
+
 def preinit_for_all_sw(state: DycoreState,
                        shape,
                        grid_data: GridData
@@ -27,23 +30,6 @@ def preinit_for_all_sw(state: DycoreState,
     # Initializing to values the Fortran does for easy comparison
     state.pe[:] = 0.0
     state.pt[:] = 1.0
-
-    '''
-    # TODO: How is this the same as below?
-    # NOTE: 'is' is like 'isc' == i start compute domain (no halos)
-      delp(isd:is-1,jsd:js-1,1:npz)=0.
-      delp(isd:is-1,je+1:jed,1:npz)=0.
-      delp(ie+1:ied,jsd:js-1,1:npz)=0.
-      delp(ie+1:ied,je+1:jed,1:npz)=0.
-    '''
-    NHALO = constants.N_HALO_DEFAULT # TODO: Where to put this?
-    SURFACE_PRESSURE = 1.0e5  # units of (Pa), from Table VI of DCMIP2016 #TODO: where to put this?
-
-    # Basically the corners of the 
-    state.delp[:NHALO, :NHALO] = 0.0
-    state.delp[:NHALO, NHALO + ny :] = 0.0
-    state.delp[NHALO + nx :, :NHALO] = 0.0
-    state.delp[NHALO + nx :, NHALO + ny :] = 0.0
 
     '''
       f0(:,:) = huge(dummy)
@@ -65,8 +51,13 @@ def preinit_for_all_sw(state: DycoreState,
     '''
     #fC = grid_data.fC() # TODO: already in gridData?, but I don't know if they match?
     
+    # Initialize the halo corners
+    state.delp[:NHALO, :NHALO] = 0.0
+    state.delp[:NHALO, NHALO + ny :] = 0.0
+    state.delp[NHALO + nx :, :NHALO] = 0.0
+    state.delp[NHALO + nx :, NHALO + ny :] = 0.0
+    
     # TODO: Below, taken from baroclinic test. Do we need these?
-    # TODO: Should these be in postinit?
     state.ua[:] = 1e35
     state.va[:] = 1e35
     state.uc[:] = 1e30
@@ -78,6 +69,8 @@ def preinit_for_all_sw(state: DycoreState,
     eta = np.zeros(nz)
     eta_v = np.zeros(nz)
     islice, jslice, slice_3d, slice_2d = init_utils.compute_slices(nx, ny)
+
+    # TODO: setup_pressure_fields may need eta file. What is that?
     init_utils.setup_pressure_fields(
         eta=eta,
         eta_v=eta_v,
@@ -91,6 +84,7 @@ def preinit_for_all_sw(state: DycoreState,
         bk=utils.asarray(grid_data.bk.data),
         ptop=grid_data.ptop,
     )
+    #print(f"***A*** state.delp[:,:,1] ({state.delp[:,:,1].shape})\n{state.delp[:,:,1]}")
 
     
 def init_for_rhwave(state: DycoreState,
@@ -113,32 +107,13 @@ def init_for_rhwave(state: DycoreState,
     omg = 7.848e-6
     rk    = 7.848e-6
     phis = 0.0 # TODO: Why is this phis scalar but used as 2d array below?
-    '''
-    # JKNOTE: This looks like it's iterating over a 2D grid to determine the A, B, C values?
-    # JKNOTE: delp is pressure_thickness_atmospheric_layer
-    # JKNOTE: This looks like what Oliver was talking about -- where the z is 1 in the delp because it's a 2d problem for shallow water?
-    # A, B, C are scalars
-    # Also -- looking at this makes me wonder if I should be thinking of using gt4py stencil somehow? I need to do a tutorial...
-         do j=js,je # TODO: Where does js and je come from? comes from bd in the fortran code.
-            do i=is,ie
-               A = 0.5*omg*(2.*costants.OMEGA+omg)*(COS(agrid(i,j,2))**2) + &
-                   0.25*rk*rk*(COS(agrid(i,j,2))**(r+r)) * &
-                   ( (r+1)*(COS(agrid(i,j,2))**2) + (2.*r*r-r-2.) - &
-                     2.*(r*r)*COS(agrid(i,j,2))**(-2.) )
-               B = (2.*(constants.OMEGA+omg)*rk / ((r+1)*(r+2))) * (COS(agrid(i,j,2))**r) * &
-                    ( (r*r+2.*r+2.) - ((r+1.)*COS(agrid(i,j,2)))**2 )
-               C = 0.25*rk*rk*(COS(agrid(i,j,2))**(2.*r)) * ( &
-                   (r+1) * (COS(agrid(i,j,2))**2.) - (r+2.) )
-               delp(i,j,1) =gh0 + radius*radius*(A+B*COS(r*agrid(i,j,1))+C*COS(2.*r*agrid(i,j,1)))
-               delp(i,j,1) = delp(i,j,1) - phis(i,j)
-            enddo
-         enddo
-    '''
     # TODO: What is agrid(i, j, 2), agrid(i, j, 2)
     # lon_agrid=utils.asarray(grid_data.lon_agrid.data[slice_2d_buffer]),
     # lat_agrid=utils.asarray(grid_data.lat_agrid.data[slice_2d_buffer]),
     agd1 = grid_data.lat_agrid.data[:] # TODO: likely wrong
+    #print(f"agd1 ({agd1.shape})\n{agd1}")
     agd2 = grid_data.lon_agrid.data[:] # TODO: likely wrong
+    #print(f"agd2 ({agd2.shape})\n{agd2}")
     
     A = (0.5 * omg * (2 * constants.OMEGA + omg) * (np.cos(agd2)**2)
          + 0.25 * rk * rk * (np.cos(agd2)**(r + r))
@@ -147,10 +122,55 @@ def init_for_rhwave(state: DycoreState,
          * (np.cos(agd2)**r) * ((r*r+2 * r + 2) - ((r + 1) * np.cos(agd2))**2 ))
     C = 0.25 * rk * rk * (np.cos(agd2)**(2 * r)) * ((r + 1) * (np.cos(agd2)**2) - (r+2))
     
+    #print(f"A ({A.shape})\n{A}")
+    #print(f"B ({B.shape})\n{B}")
+    #print(f"C ({C.shape})\n{C}")
     state.delp[:,:,1] = (gh0 + constants.RADIUS * constants.RADIUS
                          * ( A + B * np.cos(r * agd1) + C * np.cos(2 * r * agd1)))
+    #print(f"***B*** state.delp[:,:,1] ({state.delp[:,:,1].shape})\n{state.delp[:,:,1]}")
     state.delp[:,:,1] = state.delp[:,:,1] - phis # TODO: Subtract 0?
+    #print(f"***C*** state.delp[:,:,1] ({state.delp[:,:,1].shape})\n{state.delp[:,:,1]}")
+
+    # TODO: Check why p1, p2 from grid is different in baroclinic example (pa1, pa2)
+    grid = np.transpose(
+        np.stack(
+            [grid_data._horizontal_data.lon.data, grid_data._horizontal_data.lat.data]
+        ),
+        [1, 2, 0],
+    )
+    p1 = grid[:-1, :, :]
+    p2 = grid[1:, :, :]
     
+    muv = init_utils._find_midpoint_unit_vectors(p1, p2)
+    p3 = muv["midpoint"]
+    e2 = muv["unit_dir"] 
+    ex = muv["exv"] 
+    ey = muv["eyv"]
+    utmp = (constants.RADIUS * omg * np.cos(p3[:, :, 1]) + constants.RADIUS * rk * (np.cos(p3[:, :, 1])**(r-1)) * (r * np.sin(p3[:, :, 1])**2 - np.cos(p3[:, :, 1])**2)*np.cos(r*p3[:, :, 0]))
+    vtmp = -1 * constants.RADIUS * rk * r * np.sin(p3[:, :, 1]) * np.sin(r * p3[:, :, 0]) * np.cos(p3[:, :, 1])**(r-1)
+    #print(f"********************muv p3 {p3.shape}: {p3}")
+    #print(f"********************muv e2 {e2.shape}: {e2}")
+    #print(f"********************muv ex {ex.shape}: {ex}")
+    #print(f"********************muv ey {ey.shape}: {ey}")
+    #print(f"********************muv utmp {utmp.shape}: {utmp}")
+    #print(f"********************muv vtmp {vtmp.shape}: {vtmp}")
+
+    state.u[:-1, :, 0] = utmp * np.sum(e2 * ex, 2) + vtmp * np.sum(e2 * ey, 2)
+    
+
+    p1 = grid[:, :-1, :]
+    p2 = grid[:, 1:, :]
+    muv = init_utils._find_midpoint_unit_vectors(p1, p2)
+    p3 = muv["midpoint"]
+    e2 = muv["unit_dir"] 
+    ex = muv["exv"] 
+    ey = muv["eyv"]
+    utmp = (constants.RADIUS * omg * np.cos(p3[:, :, 1]) + constants.RADIUS * rk * (np.cos(p3[:, :, 1])**(r-1)) * (r * np.sin(p3[:, :, 1])**2 - np.cos(p3[:, :, 1])**2)*np.cos(r*p3[:, :, 0]))
+    vtmp = -1 * constants.RADIUS * rk * r * np.sin(p3[:, :, 1]) * np.sin(r * p3[:, :, 0]) * np.cos(p3[:, :, 1])**(r-1)
+    state.v[:, :-1, 0] = utmp * np.sum(e2 * ex, 2) + vtmp * np.sum(e2 * ey, 2)
+    
+    # TODO: Pay attention to the slice indices. u and v are similarly calculated.
+
     """ From test_cases.F90 (case 6): 
          do j=js,je
             do i=is,ie+1
@@ -224,6 +244,9 @@ def postinit_for_all_sw(state):
          u(:,:,z) = u(:,:,1)
          v(:,:,z) = v(:,:,1)
       enddo
+    '''
+    state.u[:,:,1:] = state.u[:,:,0][:,:,np.newaxis] # TODO: Is this right?
+    '''
 
       do j=js,je
          do i=is,ie
@@ -261,9 +284,12 @@ def init_rhwave_state(
     shape = (*sample_quantity.data.shape[0:2], grid_data.ak.data.shape[0])
     numpy_state = init_utils.empty_numpy_dycore_state(shape)
 
+    #print(f"***MAIN A*** numpy_state.delp[:,:,1] ({numpy_state.delp[:,:,1].shape})\n{numpy_state.delp[:,:,1]}")
     preinit_for_all_sw(numpy_state, shape, grid_data)
+    #print(f"***MAIN B*** numpy_state.delp[:,:,1] ({numpy_state.delp[:,:,1].shape})\n{numpy_state.delp[:,:,1]}")
     init_for_rhwave(numpy_state, grid_data)
-    postinit_for_all_sw(numpy_state)
+    #print(f"***MAIN C*** numpy_state.delp[:,:,1] ({numpy_state.delp[:,:,1].shape})\n{numpy_state.delp[:,:,1]}")
+    #postinit_for_all_sw(numpy_state)
 
     # TODO: Actual DycoreState init
     state = DycoreState.init_from_numpy_arrays(
@@ -272,8 +298,7 @@ def init_rhwave_state(
         backend=sample_quantity.metadata.gt4py_backend,
     )
 
-    # TODO Halo Update?
-    #comm.halo_update(state.phis, n_points=NHALO)
-    #comm.vector_halo_update(state.u, state.v, n_points=NHALO)
+    comm.halo_update(state.phis, n_points=NHALO)
+    comm.vector_halo_update(state.u, state.v, n_points=NHALO)
 
     return state
