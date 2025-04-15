@@ -27,7 +27,6 @@ def preinit_for_all_sw(state: DycoreState,
     
     nx, ny, nz = init_utils.local_compute_size(shape)
     
-    # Initializing to values the Fortran does for easy comparison
     state.pe[:] = 0.0
     state.pt[:] = 1.0
 
@@ -51,7 +50,7 @@ def preinit_for_all_sw(state: DycoreState,
     '''
     #fC = grid_data.fC() # TODO: already in gridData?, but I don't know if they match?
     
-    # Initialize the halo corners
+    # Initialize Halo Corners
     state.delp[:NHALO, :NHALO] = 0.0
     state.delp[:NHALO, NHALO + ny :] = 0.0
     state.delp[NHALO + nx :, :NHALO] = 0.0
@@ -62,7 +61,7 @@ def preinit_for_all_sw(state: DycoreState,
     state.va[:] = 1e35
     state.uc[:] = 1e30
     state.vc[:] = 1e30
-    state.w[:] = 1.0e30
+    state.w[:] = 0 # vertical component of the wind JKNOTE
     state.delz[:] = 1.0e25
     state.phis[:] = 1.0e25
     state.ps[:] = SURFACE_PRESSURE
@@ -84,7 +83,6 @@ def preinit_for_all_sw(state: DycoreState,
         bk=utils.asarray(grid_data.bk.data),
         ptop=grid_data.ptop,
     )
-    #print(f"***A*** state.delp[:,:,1] ({state.delp[:,:,1].shape})\n{state.delp[:,:,1]}")
 
     
 def init_for_rhwave(state: DycoreState,
@@ -94,42 +92,48 @@ def init_for_rhwave(state: DycoreState,
     Initialization specific to Rossby Wave number 4 from test_cases.F90
 
     TODO Update Inputs eventually; for now, taken from baroclinic initialization
-
-    Inputs lon, lat, lon_agrid, lat_agrid, ee1, ee2, es1, ew2, ptop are defined by the
-           grid and can be computed using an instance of the MetricTerms class.
-    Inputs eta and eta_v are vertical coordinate columns derived from the ak and bk
-           variables, also found in the Metric Terms class.
     """
     # TODO: Where is grav defined? ~/pace/NDSL/ndsl/constants.py?
     ubar = 0.0 # TODO What is ubar?
     gh0 = 8.0e3 * constants.GRAV # TODO: what is gh0
-    r = 4.0 # TODO What is r?
+    r = 4.0 # TODO What is r? Wave Number 4 (likely)
     omg = 7.848e-6
     rk    = 7.848e-6
-    phis = 0.0 # TODO: Why is this phis scalar but used as 2d array below?
+    state.phis[:] = 0.0
+
+
     # TODO: What is agrid(i, j, 2), agrid(i, j, 2)
     # lon_agrid=utils.asarray(grid_data.lon_agrid.data[slice_2d_buffer]),
     # lat_agrid=utils.asarray(grid_data.lat_agrid.data[slice_2d_buffer]),
-    agd1 = grid_data.lat_agrid.data[:] # TODO: likely wrong
-    #print(f"agd1 ({agd1.shape})\n{agd1}")
-    agd2 = grid_data.lon_agrid.data[:] # TODO: likely wrong
-    #print(f"agd2 ({agd2.shape})\n{agd2}")
+
+    agd0 = grid_data.lon_agrid.data[:] # TODO: maybe ok
+    agd1 = grid_data.lat_agrid.data[:] # TODO: maybe ok
     
-    A = (0.5 * omg * (2 * constants.OMEGA + omg) * (np.cos(agd2)**2)
-         + 0.25 * rk * rk * (np.cos(agd2)**(r + r))
-         * ((r + 1) * (np.cos(agd2)**2) + (2 * r * r - r - 2) - 2 * (r * r) * np.cos(agd2)**(-2)))
+    print(f"***B*** state.delp[:,:,0] ({state.delp[:,:,0].shape})\n{state.delp[:,:,0]}")
+
+    #agrid = np.transpose(
+    #    np.stack(
+    #        [grid_data._horizontal_data.lon_agrid.data, grid_data._horizontal_data.lat_agrid.data]
+    #    ),
+    #    [1, 2, 0],
+    #)
+    #agd0 = agrid[:, :, 0]
+    #agd1 = agrid[:, :, 1]
+    
+    A = (0.5 * omg * (2 * constants.OMEGA + omg) * (np.cos(agd1)**2)
+         + 0.25 * rk * rk * (np.cos(agd1)**(r + r))
+         * ((r + 1) * (np.cos(agd1)**2) + (2 * r * r - r - 2) - 2 * (r * r) * np.cos(agd1)**(-2)))
     B = ((2 * (constants.OMEGA + omg) * rk / ((r+1) * (r+2)))
-         * (np.cos(agd2)**r) * ((r*r+2 * r + 2) - ((r + 1) * np.cos(agd2))**2 ))
-    C = 0.25 * rk * rk * (np.cos(agd2)**(2 * r)) * ((r + 1) * (np.cos(agd2)**2) - (r+2))
+         * (np.cos(agd1)**r) * ((r*r+2 * r + 2) - ((r + 1) * np.cos(agd1))**2 ))
+    C = 0.25 * rk * rk * (np.cos(agd1)**(2 * r)) * ((r + 1) * (np.cos(agd1)**2) - (r+2))
     
     #print(f"A ({A.shape})\n{A}")
     #print(f"B ({B.shape})\n{B}")
     #print(f"C ({C.shape})\n{C}")
-    state.delp[:,:,1] = (gh0 + constants.RADIUS * constants.RADIUS
-                         * ( A + B * np.cos(r * agd1) + C * np.cos(2 * r * agd1)))
-    #print(f"***B*** state.delp[:,:,1] ({state.delp[:,:,1].shape})\n{state.delp[:,:,1]}")
-    state.delp[:,:,1] = state.delp[:,:,1] - phis # TODO: Subtract 0?
-    #print(f"***C*** state.delp[:,:,1] ({state.delp[:,:,1].shape})\n{state.delp[:,:,1]}")
+    state.delp[:,:,0] = (gh0 + constants.RADIUS * constants.RADIUS
+                         * ( A + B * np.cos(r * agd0) + C * np.cos(2 * r * agd0)))
+    state.delp[:,:,0] = state.delp[:,:,0] - state.phis[:]
+    print(f"***C*** state.delp[:,:,0] ({state.delp[:,:,0].shape})\n{state.delp[:,:,0]}")
 
     # TODO: Check why p1, p2 from grid is different in baroclinic example (pa1, pa2)
     grid = np.transpose(
@@ -172,32 +176,6 @@ def init_for_rhwave(state: DycoreState,
     # TODO: Pay attention to the slice indices. u and v are similarly calculated.
 
     """ From test_cases.F90 (case 6): 
-         do j=js,je
-            do i=is,ie+1
-               p1(:) = grid(i  ,j ,1:2)
-               p2(:) = grid(i,j+1 ,1:2)
-               call mid_pt_sphere(p1, p2, p3)
-               call get_unit_vect2(p1, p2, e2)
-               call get_latlon_vector(p3, ex, ey)
-               utmp = radius*omg*cos(p3(2)) +                      &
-                      radius*rk*(cos(p3(2))**(R-1))*(R*sin(p3(2))**2-cos(p3(2))**2)*cos(R*p3(1))
-               vtmp = -radius*rk*R*sin(p3(2))*sin(R*p3(1))*cos(p3(2))**(R-1)
-               v(i,j,1) = utmp*inner_prod(e2,ex) + vtmp*inner_prod(e2,ey)
-            enddo
-         enddo
-         do j=js,je+1
-            do i=is,ie
-               p1(:) = grid(i,  j,1:2)
-               p2(:) = grid(i+1,j,1:2)
-               call mid_pt_sphere(p1, p2, p3)
-               call get_unit_vect2(p1, p2, e1)
-               call get_latlon_vector(p3, ex, ey)
-               utmp = radius*omg*cos(p3(2)) +                      &
-                      radius*rk*(cos(p3(2))**(R-1))*(R*sin(p3(2))**2-cos(p3(2))**2)*cos(R*p3(1))
-               vtmp = -radius*rk*R*sin(p3(2))*sin(R*p3(1))*cos(p3(2))**(R-1)
-               u(i,j,1) = utmp*inner_prod(e1,ex) + vtmp*inner_prod(e1,ey)
-            enddo
-         enddo
          call mp_update_dwinds(u, v, npx, npy, npz, domain, bd)
          call dtoa( u, v,ua,va,dx,dy,dxa,dya,dxc,dyc,npx,npy,ng,bd)
          !call mpp_update_domains( ua, va, domain, gridtype=AGRID_PARAM)
@@ -239,6 +217,7 @@ def postinit_for_all_sw(state):
 
     state.u[:,:,1:] = state.u[:,:,0][:,:,np.newaxis]
     state.v[:,:,1:] = state.v[:,:,0][:,:,np.newaxis]
+    state.ps[:] = state.delp[:,:,0]
     
     '''
 
