@@ -12,6 +12,12 @@ from pyFV3.initialization import init_utils
 
 NHALO = constants.N_HALO_DEFAULT # TODO: Where to put this?
 SURFACE_PRESSURE = 1.0e5  # units of (Pa), from Table VI of DCMIP2016 #TODO: where to put this?
+OMG = 7.848e-6
+RK    = 7.848e-6
+R = 4.0 # Wave Number 4 (likely)
+UBAR = 0.0 # TODO: Remove? Not yet used?
+GH0 = 8.0e3 * constants.GRAV
+
 
 def preinit_for_all_sw(state: DycoreState,
                        shape,
@@ -30,25 +36,7 @@ def preinit_for_all_sw(state: DycoreState,
     state.pe[:] = 0.0
     state.pt[:] = 1.0
 
-    '''
-      f0(:,:) = huge(dummy)
-      fC(:,:) = huge(dummy)
-      do j=jsd,jed+1
-         do i=isd,ied+1
-            fC(i,j) = 2.*omega*( -1.*cos(grid(i,j,1))*cos(grid(i,j,2))*sin(alpha) + &
-                                     sin(grid(i,j,2))*cos(alpha) )
-         enddo
-      enddo
-      do j=jsd,jed
-         do i=isd,ied
-            f0(i,j) = 2.*omega*( -1.*cos(agrid(i,j,1))*cos(agrid(i,j,2))*sin(alpha) + &
-                                     sin(agrid(i,j,2))*cos(alpha) )
-         enddo
-      enddo
-      call mpp_update_domains( f0, domain )
-      if (cubed_sphere) call fill_corners(f0, npx, npy, YDir)#end
-    '''
-    #fC = grid_data.fC() # TODO: already in gridData?, but I don't know if they match?
+    # TODO: Do we have to initialize f0, fC?
     
     # Initialize Halo Corners
     state.delp[:NHALO, :NHALO] = 0.0
@@ -84,56 +72,56 @@ def preinit_for_all_sw(state: DycoreState,
         ptop=grid_data.ptop,
     )
 
-    
+
+def init_rhwave_winds(p1, p2): # TODO document p1, p2
+    """ TODO
+    """
+    muv = init_utils._find_midpoint_unit_vectors(p1, p2)
+    p3 = muv["midpoint"]
+    e2 = muv["unit_dir"] 
+    ex = muv["exv"] 
+    ey = muv["eyv"]
+    utmp = (
+        constants.RADIUS * OMG * np.cos(p3[:, :, 1]) + constants.RADIUS * RK
+        * (np.cos(p3[:, :, 1])**(R-1))
+        * (R * np.sin(p3[:, :, 1])**2 - np.cos(p3[:, :, 1])**2)*np.cos(R*p3[:, :, 0])
+    )
+    vtmp = (
+        -1 * constants.RADIUS * RK * R * np.sin(p3[:, :, 1])
+        * np.sin(R * p3[:, :, 0]) * np.cos(p3[:, :, 1])**(R-1)
+    )
+    return utmp * np.sum(e2 * ex, 2) + vtmp * np.sum(e2 * ey, 2)
+
+
+def init_rhwave_delp(state: DycoreState,
+                     grid_data: GridData
+):
+    agd0 = grid_data.lon_agrid.data[:]
+    agd1 = grid_data.lat_agrid.data[:]    
+    A = (0.5 * OMG * (2 * constants.OMEGA + OMG) * (np.cos(agd1)**2)
+         + 0.25 * RK * RK * (np.cos(agd1)**(R + R))
+         * ((R + 1) * (np.cos(agd1)**2) + (2 * R * R - R - 2) - 2 * (R * R) * np.cos(agd1)**(-2)))
+    B = ((2 * (constants.OMEGA + OMG) * RK / ((R+1) * (R+2)))
+         * (np.cos(agd1)**R) * ((R*R+2 * R + 2) - ((R + 1) * np.cos(agd1))**2 ))
+    C = 0.25 * RK * RK * (np.cos(agd1)**(2 * R)) * ((R + 1) * (np.cos(agd1)**2) - (R+2))    
+    return (GH0 + constants.RADIUS * constants.RADIUS
+            * ( A + B * np.cos(R * agd0) + C * np.cos(2 * R * agd0)))
+
+
 def init_for_rhwave(state: DycoreState,
                     grid_data: GridData
 ):
     """
     Initialization specific to Rossby Wave number 4 from test_cases.F90
 
-    TODO Update Inputs eventually; for now, taken from baroclinic initialization
+    TODO Update Inputs
     """
-    # TODO: Where is grav defined? ~/pace/NDSL/ndsl/constants.py?
-    ubar = 0.0 # TODO What is ubar?
-    gh0 = 8.0e3 * constants.GRAV # TODO: what is gh0
-    r = 4.0 # TODO What is r? Wave Number 4 (likely)
-    omg = 7.848e-6
-    rk    = 7.848e-6
+    
     state.phis[:] = 0.0
 
-
-    # TODO: What is agrid(i, j, 2), agrid(i, j, 2)
-    # lon_agrid=utils.asarray(grid_data.lon_agrid.data[slice_2d_buffer]),
-    # lat_agrid=utils.asarray(grid_data.lat_agrid.data[slice_2d_buffer]),
-
-    agd0 = grid_data.lon_agrid.data[:] # TODO: maybe ok
-    agd1 = grid_data.lat_agrid.data[:] # TODO: maybe ok
-    
-    print(f"***B*** state.delp[:,:,0] ({state.delp[:,:,0].shape})\n{state.delp[:,:,0]}")
-
-    #agrid = np.transpose(
-    #    np.stack(
-    #        [grid_data._horizontal_data.lon_agrid.data, grid_data._horizontal_data.lat_agrid.data]
-    #    ),
-    #    [1, 2, 0],
-    #)
-    #agd0 = agrid[:, :, 0]
-    #agd1 = agrid[:, :, 1]
-    
-    A = (0.5 * omg * (2 * constants.OMEGA + omg) * (np.cos(agd1)**2)
-         + 0.25 * rk * rk * (np.cos(agd1)**(r + r))
-         * ((r + 1) * (np.cos(agd1)**2) + (2 * r * r - r - 2) - 2 * (r * r) * np.cos(agd1)**(-2)))
-    B = ((2 * (constants.OMEGA + omg) * rk / ((r+1) * (r+2)))
-         * (np.cos(agd1)**r) * ((r*r+2 * r + 2) - ((r + 1) * np.cos(agd1))**2 ))
-    C = 0.25 * rk * rk * (np.cos(agd1)**(2 * r)) * ((r + 1) * (np.cos(agd1)**2) - (r+2))
-    
-    #print(f"A ({A.shape})\n{A}")
-    #print(f"B ({B.shape})\n{B}")
-    #print(f"C ({C.shape})\n{C}")
-    state.delp[:,:,0] = (gh0 + constants.RADIUS * constants.RADIUS
-                         * ( A + B * np.cos(r * agd0) + C * np.cos(2 * r * agd0)))
+    # Initialize delp
+    state.delp[:,:,0] = init_rhwave_delp(state, grid_data)
     state.delp[:,:,0] = state.delp[:,:,0] - state.phis[:]
-    print(f"***C*** state.delp[:,:,0] ({state.delp[:,:,0].shape})\n{state.delp[:,:,0]}")
 
     # TODO: Check why p1, p2 from grid is different in baroclinic example (pa1, pa2)
     grid = np.transpose(
@@ -142,36 +130,16 @@ def init_for_rhwave(state: DycoreState,
         ),
         [1, 2, 0],
     )
+
+    # Initialize u winds
     p1 = grid[:-1, :, :]
     p2 = grid[1:, :, :]
-    
-    muv = init_utils._find_midpoint_unit_vectors(p1, p2)
-    p3 = muv["midpoint"]
-    e2 = muv["unit_dir"] 
-    ex = muv["exv"] 
-    ey = muv["eyv"]
-    utmp = (constants.RADIUS * omg * np.cos(p3[:, :, 1]) + constants.RADIUS * rk * (np.cos(p3[:, :, 1])**(r-1)) * (r * np.sin(p3[:, :, 1])**2 - np.cos(p3[:, :, 1])**2)*np.cos(r*p3[:, :, 0]))
-    vtmp = -1 * constants.RADIUS * rk * r * np.sin(p3[:, :, 1]) * np.sin(r * p3[:, :, 0]) * np.cos(p3[:, :, 1])**(r-1)
-    #print(f"********************muv p3 {p3.shape}: {p3}")
-    #print(f"********************muv e2 {e2.shape}: {e2}")
-    #print(f"********************muv ex {ex.shape}: {ex}")
-    #print(f"********************muv ey {ey.shape}: {ey}")
-    #print(f"********************muv utmp {utmp.shape}: {utmp}")
-    #print(f"********************muv vtmp {vtmp.shape}: {vtmp}")
+    state.u[:-1, :, 0] = init_rhwave_winds(p1, p2)
 
-    state.u[:-1, :, 0] = utmp * np.sum(e2 * ex, 2) + vtmp * np.sum(e2 * ey, 2)
-    
-
+    # Initialize v winds
     p1 = grid[:, :-1, :]
     p2 = grid[:, 1:, :]
-    muv = init_utils._find_midpoint_unit_vectors(p1, p2)
-    p3 = muv["midpoint"]
-    e2 = muv["unit_dir"] 
-    ex = muv["exv"] 
-    ey = muv["eyv"]
-    utmp = (constants.RADIUS * omg * np.cos(p3[:, :, 1]) + constants.RADIUS * rk * (np.cos(p3[:, :, 1])**(r-1)) * (r * np.sin(p3[:, :, 1])**2 - np.cos(p3[:, :, 1])**2)*np.cos(r*p3[:, :, 0]))
-    vtmp = -1 * constants.RADIUS * rk * r * np.sin(p3[:, :, 1]) * np.sin(r * p3[:, :, 0]) * np.cos(p3[:, :, 1])**(r-1)
-    state.v[:, :-1, 0] = utmp * np.sum(e2 * ex, 2) + vtmp * np.sum(e2 * ey, 2)
+    state.v[:, :-1, 0] = init_rhwave_winds(p1, p2)
     
     # TODO: Pay attention to the slice indices. u and v are similarly calculated.
 
@@ -202,33 +170,20 @@ def postinit_for_all_sw(state):
     '''
 
     state.delp[:,:,1:] = state.delp[:,:,0][:,:,np.newaxis]
-    
-    ''' TODO: Can I ignore these mpp_update_domains calls?
-      call mpp_update_domains( delp, domain )
-      call mpp_update_domains( phis, domain )
-    '''
-    
+        
     ''' TODO:
       phi0  = delp
 
-      call init_winds(UBar, u,v,ua,va,uc,vc, initWindsCase, npx, npy, ng, ndims, nregions, gridstruct%bounded_domain, gridstruct, domain, tile, bd)
-! Copy 3D data for Shallow Water Tests
+      call init_winds(UBAR, u,v,ua,va,uc,vc, initWindsCase, npx, npy, ng, ndims, nregions, gridstruct%bounded_domain, gridstruct, domain, tile, bd)
     '''
 
     state.u[:,:,1:] = state.u[:,:,0][:,:,np.newaxis]
     state.v[:,:,1:] = state.v[:,:,0][:,:,np.newaxis]
+    
     state.ps[:] = state.delp[:,:,0]
     
     '''
-
-      do j=js,je
-         do i=is,ie
-            ps(i,j) = delp(i,j,1)
-         enddo
-      enddo
-
-
-call mp_update_dwinds(u, v, npx, npy, npz, domain, bd)
+    call mp_update_dwinds(u, v, npx, npy, npz, domain, bd)
     '''    
 
     
@@ -268,5 +223,6 @@ def init_rhwave_state(
 
     comm.halo_update(state.phis, n_points=NHALO)
     comm.vector_halo_update(state.u, state.v, n_points=NHALO)
+    # TODO: anymore comm updates? delp?
 
     return state
