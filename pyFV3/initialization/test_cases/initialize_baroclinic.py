@@ -178,6 +178,7 @@ def baroclinic_initialization(
     # Equation (2) for v
     # Although meridional wind is 0 in this scheme
     # on the cubed sphere grid, v is not 0 on every tile
+    # JKNOTE: test_cases.F90 L1646?
     initialize_zonal_wind(
         v,
         eta,
@@ -213,6 +214,7 @@ def baroclinic_initialization(
     slice_2d_buffer = (slice(0, nx + 1), slice(0, ny + 1))
     # initialize temperature
     t_mean = init_utils.horizontally_averaged_temperature(eta)
+    # JKNOTE: test_cases.F90 L1744?
     pt[slice_3d] = init_utils.cell_average_nine_components(
         init_utils.temperature,
         [eta, eta_v, t_mean],
@@ -222,6 +224,7 @@ def baroclinic_initialization(
     )
 
     # initialize surface geopotential
+    # JKNOTE: test_cases.F90 L1809?
     phis[slice_2d] = init_utils.cell_average_nine_components(
         init_utils.surface_geopotential_perturbation,
         [],
@@ -230,12 +233,12 @@ def baroclinic_initialization(
         lat_agrid[slice_2d],
     )
 
-    if not hydrostatic:
+    if not hydrostatic: # JKNOTE: test_cases.F90 L1859
         # vertical velocity is set to 0 for nonhydrostatic setups
         w[slice_3d] = 0.0
         delz[:nx, :ny, :-1] = init_utils.initialize_delz(pt[slice_3d], peln[slice_3d])
 
-    if not adiabatic:
+    if not adiabatic: # JKNOTE: test_cases.F90 L1871
         qvapor[:nx, :ny, :-1] = init_utils.specific_humidity(
             delp[slice_3d], peln[slice_3d], lat_agrid[slice_2d]
         )
