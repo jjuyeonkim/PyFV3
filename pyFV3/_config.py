@@ -64,6 +64,7 @@ class RiemannConfig:
     a_imp: float
     use_logp: bool
     beta: float
+    sw_dynamics: bool
 
 
 @dataclasses.dataclass(frozen=True)
@@ -102,6 +103,7 @@ class AcousticDynamicsConfig:
     rf_cutoff: float
     rf_fast: bool
     breed_vortex_inline: bool
+    sw_dynamics: bool
     """
     setting for nudging where we can insert tropical cyclone tracks
     and add fake tropical cyclones at a certain point in the code
@@ -446,6 +448,7 @@ class DynamicalCoreConfig:
             a_imp=self.a_imp,
             use_logp=self.use_logp,
             beta=self.beta,
+            sw_dynamics=self.sw_dynamics
         )
 
     @property
@@ -489,6 +492,7 @@ class DynamicalCoreConfig:
             use_old_omega=self.use_old_omega,
             riemann=self.riemann,
             d_grid_shallow_water=self.d_grid_shallow_water,
+            sw_dynamics=self.sw_dynamics
         )
 
     @property
