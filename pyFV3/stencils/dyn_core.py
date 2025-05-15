@@ -463,7 +463,11 @@ class AcousticDynamics:
                 use_logp=config.use_logp,
             )
         )
-        self._akap = Float(constants.KAPPA)
+
+        if config.sw_dynamics:
+            self._akap = Float(1.0)
+        else:
+            self._akap = Float(constants.KAPPA)
 
         temporaries = dyncore_temporaries(quantity_factory)
         self._heat_source = temporaries["heat_source"]

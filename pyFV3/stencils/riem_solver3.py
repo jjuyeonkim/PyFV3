@@ -219,6 +219,7 @@ class NonhydrostaticVerticalSolver:
             origin=riemorigin,
             domain=domain,
         )
+        self.sw_dynamics = config.sw_dynamics
 
     def __call__(
         self,
@@ -284,7 +285,11 @@ class NonhydrostaticVerticalSolver:
         # gm2 is gamma (cp/cv)
         # dz2 is delz
 
-        peln1 = math.log(ptop)
+        if self.sw_dynamics:
+            peln1 = Float(0.0)
+        else:
+            peln1 = math.log(ptop)
+
         # ptk = ptop ** kappa
         ptk = math.exp(constants.KAPPA * peln1)
 
