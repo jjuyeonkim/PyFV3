@@ -772,7 +772,7 @@ class AcousticDynamics:
             remap_step = False
             if self.config.breed_vortex_inline or (it == n_split - 1):
                 remap_step = True
-            if not self.config.hydrostatic:
+            if not self.config.hydrostatic and not self.config.sw_dynamics:
                 self._halo_updaters.w.start()
                 if it == 0:
                     self._gz_from_surface_height_and_thickness(
@@ -793,7 +793,7 @@ class AcousticDynamics:
                     )
 
             self._halo_updaters.u__v.wait()
-            if not self.config.hydrostatic:
+            if not self.config.hydrostatic and not self.config.sw_dynamics:
                 self._halo_updaters.w.wait()
 
             # compute the c-grid winds at t + 1/2 timestep
@@ -822,43 +822,45 @@ class AcousticDynamics:
             if self.config.nord > 0:
                 self._halo_updaters.divgd.start()
             if not self.config.hydrostatic:
-                # TODO: is there some way we can avoid aliasing gz and zh, so that
-                # gz is always a geopotential and zh is always a height?
-                if it == 0:
-                    self._halo_updaters.gz.wait()
-                    self._copy_stencil(
-                        self._gz,
-                        self._zh,
+                if not self.config.sw_dynamics:
+                    # TODO: is there some way we can avoid aliasing gz and zh, so that
+                    # gz is always a geopotential and zh is always a height?
+                    if it == 0:
+                        self._halo_updaters.gz.wait()
+                        self._copy_stencil(
+                            self._gz,
+                            self._zh,
+                        )
+                    else:
+                        self._copy_stencil(
+                            self._zh,
+                            self._gz,
+                        )
+
+                    self.update_geopotential_height_on_c_grid(
+                        self._zs, self._ut, self._vt, self._gz, self._ws3, dt2
                     )
-                else:
-                    self._copy_stencil(
-                        self._zh,
+                    # TODO (floriand): Due to DaCe VRAM pooling creating a memory
+                    # leak with the usage pattern of those two fields
+                    # We use the C_SW internal to workaround it e.g.:
+                    #  - self.cgrid_shallow_water_lagrangian_dynamics.delpc
+                    #  - self.cgrid_shallow_water_lagrangian_dynamics.ptc
+                    # DaCe has already a fix on their side and it awaits release
+                    # issue
+                    self.vertical_solver_cgrid(
+                        dt2,
+                        self.cappa,
+                        self._ptop,
+                        state.phis,
+                        self._ws3,
+                        self.cgrid_shallow_water_lagrangian_dynamics.ptc,
+                        state.q_con,
+                        self.cgrid_shallow_water_lagrangian_dynamics.delpc,
                         self._gz,
+                        self._pkc,
+                        state.omga,
                     )
-            if not self.config.hydrostatic:
-                self.update_geopotential_height_on_c_grid(
-                    self._zs, self._ut, self._vt, self._gz, self._ws3, dt2
-                )
-                # TODO (floriand): Due to DaCe VRAM pooling creating a memory
-                # leak with the usage pattern of those two fields
-                # We use the C_SW internal to workaround it e.g.:
-                #  - self.cgrid_shallow_water_lagrangian_dynamics.delpc
-                #  - self.cgrid_shallow_water_lagrangian_dynamics.ptc
-                # DaCe has already a fix on their side and it awaits release
-                # issue
-                self.vertical_solver_cgrid(
-                    dt2,
-                    self.cappa,
-                    self._ptop,
-                    state.phis,
-                    self._ws3,
-                    self.cgrid_shallow_water_lagrangian_dynamics.ptc,
-                    state.q_con,
-                    self.cgrid_shallow_water_lagrangian_dynamics.delpc,
-                    self._gz,
-                    self._pkc,
-                    state.omga,
-                )
+                    # TODO: [JK] Where is the Reim Solver call? Need to NOT call that...
 
             self._p_grad_c(
                 self.grid_data.rdxc,
@@ -871,9 +873,12 @@ class AcousticDynamics:
                 dt2,
             )
             self._halo_updaters.uc__vc.start()
+
+            # Turn off these wait call for test cases -1 and 0 
             if self.config.nord > 0:
                 self._halo_updaters.divgd.wait()
             self._halo_updaters.uc__vc.wait()
+
             # use the computed c-grid winds to evolve the d-grid winds forward
             # by 1 timestep
             self._checkpoint_dsw_in(state)
@@ -916,55 +921,60 @@ class AcousticDynamics:
             # TODO: should the dycore have hydrostatic and non-hydrostatic modes,
             # or would we make a new class for the non-hydrostatic mode?
             if not self.config.hydrostatic:
-                # without explicit arg names, numpy does not run
-                self.update_height_on_d_grid(
-                    surface_height=self._zs,
-                    height=self._zh,
-                    courant_number_x=self._crx,
-                    courant_number_y=self._cry,
-                    x_area_flux=self._xfx,
-                    y_area_flux=self._yfx,
-                    ws=self._wsd,
-                    dt=dt_acoustic_substep,
-                )
-                self.vertical_solver(
-                    remap_step,
-                    dt_acoustic_substep,
-                    self.cappa,
-                    self._ptop,
-                    self._zs,
-                    self._wsd,
-                    state.delz,
-                    state.q_con,
-                    state.delp,
-                    state.pt,
-                    self._zh,
-                    state.pe,
-                    self._pkc,
-                    self._pk3,
-                    state.pk,
-                    state.peln,
-                    state.w,
-                )
-
-                self._halo_updaters.zh.start()
-                self._halo_updaters.pkc.start()
-                if remap_step:
-                    # TODO: can this be moved to the start of the remapping routine?
-                    self._edge_pe_stencil(state.pe, state.delp, self._ptop)
-                if self.config.use_logp:
-                    raise NotImplementedError(
-                        "unimplemented namelist option use_logp=True"
+                if not self.config.sw_dynamics:
+                    # without explicit arg names, numpy does not run
+                    self.update_height_on_d_grid(
+                        surface_height=self._zs,
+                        height=self._zh,
+                        courant_number_x=self._crx,
+                        courant_number_y=self._cry,
+                        x_area_flux=self._xfx,
+                        y_area_flux=self._yfx,
+                        ws=self._wsd,
+                        dt=dt_acoustic_substep,
                     )
-                else:
-                    self._pk3_halo(self._pk3, state.delp, self._ptop, self._akap)
+                    self.vertical_solver(
+                        remap_step,
+                        dt_acoustic_substep,
+                        self.cappa,
+                        self._ptop,
+                        self._zs,
+                        self._wsd,
+                        state.delz,
+                        state.q_con,
+                        state.delp,
+                        state.pt,
+                        self._zh,
+                        state.pe,
+                        self._pkc,
+                        self._pk3,
+                        state.pk,
+                        state.peln,
+                        state.w,
+                    )
+
+                    self._halo_updaters.zh.start()
+                    self._halo_updaters.pkc.start()
+                    if remap_step:
+                        # TODO: can this be moved to the start of the remapping routine?
+                        self._edge_pe_stencil(state.pe, state.delp, self._ptop)
+                    if self.config.use_logp:
+                        raise NotImplementedError(
+                            "unimplemented namelist option use_logp=True"
+                        )
+                    else:
+                        self._pk3_halo(self._pk3, state.delp, self._ptop, self._akap)
+
+            # Turn off this section for test cases -1 and 0
             if not self.config.hydrostatic:
-                self._halo_updaters.zh.wait()
+                #if not self.config.sw_dynamics:
+                #    self._halo_updaters.zh.wait() # TODO: [JK] Why does it not return from wait here???
                 self._compute_geopotential_stencil(
                     self._zh,
                     self._gz,
                 )
-                self._halo_updaters.pkc.wait()
+                if not self.config.sw_dynamics:
+                    self._halo_updaters.pkc.wait()
 
                 self.nonhydrostatic_pressure_gradient(
                     state.u,
@@ -1000,7 +1010,7 @@ class AcousticDynamics:
                 if self.config.grid_type < 4:
                     self._halo_updaters.interface_uc__vc.interface()
 
-        # we are here
+        # End of N-split loop (we are here)
 
         if self._do_del2cubed:
             self._halo_updaters.heat_source.update()

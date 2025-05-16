@@ -290,8 +290,9 @@ class NonhydrostaticVerticalSolver:
         else:
             peln1 = math.log(ptop)
 
+        ptk = ptop ** constants.KAPPA
         # ptk = ptop ** kappa
-        ptk = math.exp(constants.KAPPA * peln1)
+        # ptk = math.exp(constants.KAPPA * peln1)
 
         self._precompute_stencil(
             delp,
