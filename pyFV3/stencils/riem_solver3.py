@@ -285,6 +285,7 @@ class NonhydrostaticVerticalSolver:
         # gm2 is gamma (cp/cv)
         # dz2 is delz
 
+        # This may need to move to beginning of acoustic dynamics for hydrostatic
         if self.sw_dynamics:
             peln1 = Float(0.0)
         else:
