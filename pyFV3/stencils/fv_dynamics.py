@@ -530,6 +530,10 @@ class DynamicalCore:
                     timestep=self._timestep / self._k_split,
                     n_map=n_map,
                 )
+
+            if self.config.sw_dynamics:
+                continue
+
             if self.config.z_tracer:
                 if __debug__:
                     log_on_rank_0("TracerAdvection")

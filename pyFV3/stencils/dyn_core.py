@@ -465,8 +465,8 @@ class AcousticDynamics:
         )
         if self.config.sw_dynamics:
             self._akap = Float(1.0)
-            p_ref = grid_data.ak[0] + grid_data.bk[0] * Float(100000) 
-            self._pfull[0] = Float(0.5) * Float(p_ref)
+            p_ref = grid_data.ak.data[0] + grid_data.bk.data[0] * Float(100000)
+            self._pfull.data[0] = Float(0.5) * Float(p_ref)
         else:
             self._akap = Float(constants.KAPPA)
 
