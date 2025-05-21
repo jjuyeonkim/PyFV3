@@ -251,6 +251,7 @@ def init_baroclinic_state(
     hydrostatic: bool,
     moist_phys: bool,
     comm: CubedSphereCommunicator,
+    solid_state: bool = True,
 ) -> DycoreState:
     """
     Create a DycoreState object with quantities initialized to the Jablonowski &

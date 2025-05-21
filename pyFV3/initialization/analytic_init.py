@@ -1,5 +1,7 @@
 from enum import Enum
 
+import pyFV3.initialization.test_cases.initialize_baroclinic as bc
+import pyFV3.initialization.test_cases.initialize_tc as tc
 from ndsl import CubedSphereCommunicator, MetaEnumStr, QuantityFactory
 from ndsl.grid import GridData
 from ndsl.typing import Communicator
@@ -8,6 +10,7 @@ from pyFV3.dycore_state import DycoreState
 
 class Cases(Enum, metaclass=MetaEnumStr):
     baroclinic = "baroclinic"
+    baroclinic_ss = "baroclinic_ss" # Solid State (Case 12)
     tropicalcyclone = "tropicalcyclone"
 
 
@@ -34,12 +37,21 @@ def init_analytic_state(
     Returns:
         an instance of DycoreState class
     """
-    if analytic_init_case in Cases:  # type: ignore
+    # Cases that expect Cubed Sphere Communicator
+    spherical_cases = [
+        Cases.baroclinic.value,
+        Cases.baroclinic_ss.value,
+        Cases.tropicalcyclone.value,
+    ]
+
+    if analytic_init_case in spherical_cases:  # type: ignore
+        # TODO: Consider CubedSphereCommunicator check within individual init_*() calls
+        if not isinstance(comm, CubedSphereCommunicator):
+            raise TypeError(
+                f"Expected CubedSphereCommunicator instance for 'comm', "
+                f"got {type(comm).__name__} instead."
+            )
         if analytic_init_case == Cases.baroclinic.value:  # type: ignore
-            import pyFV3.initialization.test_cases.initialize_baroclinic as bc
-
-            assert isinstance(comm, CubedSphereCommunicator)
-
             return bc.init_baroclinic_state(
                 grid_data=grid_data,
                 quantity_factory=quantity_factory,
@@ -48,12 +60,17 @@ def init_analytic_state(
                 moist_phys=moist_phys,
                 comm=comm,
             )
-
+        elif analytic_init_case == Cases.baroclinic_ss.value:  # type: ignore
+            return bc.init_baroclinic_state(
+                grid_data=grid_data,
+                quantity_factory=quantity_factory,
+                adiabatic=adiabatic,
+                hydrostatic=hydrostatic,
+                moist_phys=moist_phys,
+                comm=comm,
+                solid_state=True,
+            )
         elif analytic_init_case == Cases.tropicalcyclone.value:  # type: ignore
-            import pyFV3.initialization.test_cases.initialize_tc as tc
-
-            assert isinstance(comm, CubedSphereCommunicator)
-
             return tc.init_tc_state(
                 grid_data=grid_data,
                 quantity_factory=quantity_factory,
