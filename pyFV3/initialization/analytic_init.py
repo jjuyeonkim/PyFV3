@@ -1,6 +1,7 @@
 from enum import Enum
 
 import pyFV3.initialization.test_cases.initialize_baroclinic as bc
+import pyFV3.initialization.test_cases.initialize_rossby as rossby
 import pyFV3.initialization.test_cases.initialize_tc as tc
 from ndsl import CubedSphereCommunicator, MetaEnumStr, QuantityFactory
 from ndsl.grid import GridData
@@ -11,6 +12,7 @@ from pyFV3.dycore_state import DycoreState
 class Cases(Enum, metaclass=MetaEnumStr):
     baroclinic = "baroclinic"
     baroclinic_ss = "baroclinic_ss" # Solid State (Case 12)
+    rossby = "rossby"
     tropicalcyclone = "tropicalcyclone"
 
 
@@ -42,6 +44,7 @@ def init_analytic_state(
         Cases.baroclinic.value,
         Cases.baroclinic_ss.value,
         Cases.tropicalcyclone.value,
+        Cases.rossby.value,
     ]
 
     if analytic_init_case in spherical_cases:  # type: ignore
@@ -51,6 +54,7 @@ def init_analytic_state(
                 f"Expected CubedSphereCommunicator instance for 'comm', "
                 f"got {type(comm).__name__} instead."
             )
+
         if analytic_init_case == Cases.baroclinic.value:  # type: ignore
             return bc.init_baroclinic_state(
                 grid_data=grid_data,
@@ -75,6 +79,12 @@ def init_analytic_state(
                 grid_data=grid_data,
                 quantity_factory=quantity_factory,
                 hydrostatic=hydrostatic,
+                comm=comm,
+            )
+        elif analytic_init_case == Cases.rossby.value:  # type: ignore
+            return rossby.init_rossby_state(
+                grid_data=grid_data,
+                quantity_factory=quantity_factory,
                 comm=comm,
             )
         else:
