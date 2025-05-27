@@ -6,8 +6,7 @@ import pyFV3.initialization.test_cases.initialize_tc as tc
 from ndsl import CubedSphereCommunicator, MetaEnumStr, QuantityFactory
 from ndsl.grid import GridData
 from ndsl.typing import Communicator
-from pyFV3.dycore_state import DycoreState
-
+from pyFV3 import DycoreState, DynamicalCoreConfig
 
 class Cases(Enum, metaclass=MetaEnumStr):
     baroclinic = "baroclinic"
@@ -20,9 +19,7 @@ def init_analytic_state(
     analytic_init_case: str,
     grid_data: GridData,
     quantity_factory: QuantityFactory,
-    adiabatic: bool,
-    hydrostatic: bool,
-    moist_phys: bool,
+    config: DynamicalCoreConfig,
     comm: Communicator,
 ) -> DycoreState:
     """
@@ -31,9 +28,6 @@ def init_analytic_state(
         analytic_init_str:      test case specifier
         grid_data:              current selected grid data values
         quantity_factory:       inclusion of QuantityFactory class
-        adiabatic:              flag for adiabatic methods
-        hydrostatic:            flag for hydrostatic methods
-        moist_phys:             flag for including moisture physics methods
         comm:                   inclusion of CubedSphereCommunicator class
 
     Returns:
@@ -59,9 +53,9 @@ def init_analytic_state(
             return bc.init_baroclinic_state(
                 grid_data=grid_data,
                 quantity_factory=quantity_factory,
-                adiabatic=adiabatic,
-                hydrostatic=hydrostatic,
-                moist_phys=moist_phys,
+                adiabatic=config.adiabatic,
+                hydrostatic=config.hydrostatic,
+                moist_phys=config.moist_phys,
                 comm=comm,
             )
         elif analytic_init_case == Cases.baroclinic_ss.value:  # type: ignore
