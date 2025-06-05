@@ -9,7 +9,7 @@ import numpy as np
 from ndsl import CubedSphereCommunicator, QuantityFactory, constants
 from ndsl.dsl.typing import Float
 from ndsl.grid import GridData
-from pyFV3.dycore_state import DycoreState
+from pyFV3 import DycoreState, DynamicalCoreConfig
 from pyFV3.initialization import init_utils
 
 
@@ -173,6 +173,7 @@ def _postinit_for_all_sw(numpy_state: DycoreState):
 def init_rossby_state(
     grid_data: GridData,
     quantity_factory: QuantityFactory,
+    dycore_config: DynamicalCoreConfig,
     comm: CubedSphereCommunicator,
 ) -> DycoreState:
     """
@@ -181,14 +182,18 @@ def init_rossby_state(
     Args:
         grid_data:              current selected grid data values
         quantity_factory:       QuantityFactory
+        dycore_config:          DynamicalCoreConfig
         comm:                   CubedSphereCommunicator
 
     Returns:
         DycoreState
     """
 
-    # TODO: Check sw_dunamics is True (https://github.com/NOAA-GFDL/PyFV3/pull/50)
-    #       May require a change to pass a config here in order to check.
+    if not dycore_config.sw_dynamics:
+        raise ValueError(
+            f"Rossby initialization requires dynamical core config "
+            f"sw_dynamics flag to be True."
+        )
 
     sample_quantity = grid_data.lat
     shape = (*sample_quantity.data.shape[0:2], grid_data.ak.data.shape[0])

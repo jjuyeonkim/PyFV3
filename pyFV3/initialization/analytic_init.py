@@ -79,6 +79,7 @@ def init_analytic_state(
             return rossby.init_rossby_state(
                 grid_data=grid_data,
                 quantity_factory=quantity_factory,
+                dycore_config=config,
                 comm=comm,
             )
         else:
