@@ -1,6 +1,7 @@
 from enum import Enum
 
 import pyfv3.initialization.test_cases.initialize_baroclinic as bc
+import pyfv3.initialization.test_cases.initialize_modon3d as modon3d
 import pyfv3.initialization.test_cases.initialize_rossby as rossby
 import pyfv3.initialization.test_cases.initialize_tc as tc
 from ndsl import CubedSphereCommunicator, MetaEnumStr, QuantityFactory
@@ -14,6 +15,7 @@ class AnalyticCase(Enum, metaclass=MetaEnumStr):
     baroclinic_steady = "baroclinic_steady"
     rossby = "rossby"
     tropicalcyclone = "tropicalcyclone"
+    modon3d = "modon3d"
 
 
 def init_analytic_state(
@@ -91,6 +93,12 @@ def init_analytic_state(
                     "sw_dynamics flag to be True."
                 )
             return rossby.init_rossby_state(
+                grid_data=grid_data,
+                quantity_factory=quantity_factory,
+                comm=comm,
+            )
+        elif analytic_init_case == AnalyticCase.modon3d:
+            return modon3d.init_state(
                 grid_data=grid_data,
                 quantity_factory=quantity_factory,
                 comm=comm,
