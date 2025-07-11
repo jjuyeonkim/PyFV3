@@ -1,3 +1,4 @@
+from types import SimpleNamespace # TODO: Is there a better way?
 import numpy as np
 
 import ndsl.constants as constants
@@ -11,33 +12,88 @@ from pyfv3.initialization import init_utils
 
 # TODO: Why isn't this a class with things like NHALO passed around as member variables and _init_background_state as member functions? 
 
+SURFACE_PRESSURE = Float(1.0e5) # TODO: Same as baroclinic... how to consolidate?
 NHALO = constants.N_HALO_DEFAULT
 
-def _init_background_state(numpy_state):
+def _init_background_state(numpy_state: SimpleNamespace):
     """
+    TODO desc
     Args:
         numpy_state: DycoreState modified to initialize ps, phis, u, v, q
     """
-    #ps(:,:) = p00
-    p00 = Float(1000e2)
-    numpy_state.ps[:] = p00
+    numpy_state.ps[:] = SURFACE_PRESSURE
     numpy_state.phis[:] = Float(0.0)
     numpy_state.u[:] = Float(0.0)
     numpy_state.v[:] = Float(0.0)
-    numpy_state.q[:] = Float(0.0)
+    numpy_state.qvapor[:] = Float(0.0) #TODO: Is "q" qvapor?
 
 
-def _init_delta_p():
-   pass
+def _init_modon_pressure_fields(grid_data: GridData, numpy_state: SimpleNamespace, shape: tuple):
+    """
+    TODO desc
+    Args:
+        grid_data: GridData
+        numpy_state: DycoreState modified to initialize delp, pe, peln, pk
+        shape: tuple
+    """
+    numpy_state.pe[:] = 0.0
+    numpy_state.pk[:] = 1.0
+
+    # Initialize Halo Corners
+    nx, ny, nz = init_utils.local_compute_size(shape)
+
+    # TODO: copying from baroclinic --- double-check for modon.
+    numpy_state.delp[:] = 1e30
+    numpy_state.delp[:NHALO, :NHALO] = 0.0
+    numpy_state.delp[:NHALO, NHALO + ny :] = 0.0
+    numpy_state.delp[NHALO + nx :, :NHALO] = 0.0
+    numpy_state.delp[NHALO + nx :, NHALO + ny :] = 0.0
+
+    # TODO: copying from baroclinic --- double-check indices for modon.
+    # TODO: is eta needed?
+    eta = np.zeros(nz)
+    eta_v = np.zeros(nz)
+    islice, jslice, slice_3d, slice_2d = init_utils.compute_slices(nx, ny)
+    # Slices with extra buffer points in the horizontal dimension
+    # to accomodate averaging over shifted calculations on the grid
+    _, _, slice_3d_buffer, slice_2d_buffer = init_utils.compute_slices(nx + 1, ny + 1)
+
+    ak=utils.asarray(grid_data.ak.data)
+    bk=utils.asarray(grid_data.bk.data)
+    ptop=grid_data.ptop
+
+    # TODO: see if you can simplify... for now slice first and then use unit_utils
+
+    ps_slice_2d = numpy_state.ps[slice_2d]
+    ps_slice_2d[:] = SURFACE_PRESSURE # TODO: This is set above, do I need this?
+
+    delp_slice_3d = numpy_state.delp[slice_3d]
+    delp_slice_3d[:, :, :-1] = init_utils.initialize_delp(ps_slice_2d, ak, bk)
+
+    pe_slice_3d = numpy_state.pe[slice_3d]
+    pe_slice_3d[:] = init_utils.initialize_edge_pressure(delp_slice_3d, ptop)
+
+    peln_slice_3d = numpy_state.peln[slice_3d]
+    peln_slice_3d[:] = init_utils.initialize_log_pressure_interfaces(pe_slice_3d, ptop)
+
+    # pk looks different than baroclinic, so that's why I'm pulling it out.
+    pk_slice_3d=numpy_state.pk[slice_3d]
+    pk_slice_3d[:] = np.zeros(pe_slice_3d.shape)
+    pk_slice_3d[:, :, 0]  = np.exp(constants.KAPPA * peln_slice_3d[:, :, 0 ])
+    pk_slice_3d[:, :, 1:] = np.exp(constants.KAPPA * peln_slice_3d[:, :, 1:])
+
 
 def _init_westerly_wind_burst():
    pass
 
-def _add_easterly_wind_burst():
+
+def _init_easterly_wind_burst():
    pass
+
 
 def _convert_back_to_temperature():
    pass
+
 
 def init_state(
     grid_data: GridData,
@@ -53,9 +109,9 @@ def init_state(
     numpy_state = init_utils.empty_numpy_dycore_state(shape)
 
     _init_background_state(numpy_state)
-    _init_delta_p()
+    _init_modon_pressure_fields(grid_data, numpy_state, shape)
     _init_westerly_wind_burst()
-    _add_easterly_wind_burst()
+    _init_easterly_wind_burst()
     _convert_back_to_temperature()
     # Nest Test?
     # Delz, w calculation for non-hydrostatic?
