@@ -13,8 +13,19 @@ from pyfv3.initialization import init_utils
 
 NHALO = constants.N_HALO_DEFAULT
 
-def _init_background_state():
-   pass
+def _init_background_state(numpy_state):
+    """
+    Args:
+        numpy_state: DycoreState modified to initialize ps, phis, u, v, q
+    """
+    #ps(:,:) = p00
+    p00 = Float(1000e2)
+    numpy_state.ps[:] = p00
+    numpy_state.phis[:] = Float(0.0)
+    numpy_state.u[:] = Float(0.0)
+    numpy_state.v[:] = Float(0.0)
+    numpy_state.q[:] = Float(0.0)
+
 
 def _init_delta_p():
    pass
@@ -31,40 +42,17 @@ def _convert_back_to_temperature():
 def init_state(
     grid_data: GridData,
     quantity_factory: QuantityFactory,
+    comm: CubedSphereCommunicator,
 ) -> DycoreState:
     """
-    Create a DycoreState object with quantities initialized to the Jablonowski &
-    Williamson baroclinic test case perturbation applied to the cubed sphere grid.
+    Create a DycoreState object with quantities initialized for the
+    3D Modon Soliton test case applied to the cubed sphere grid.
     """
     sample_quantity = grid_data.lat
     shape = (*sample_quantity.data.shape[0:2], grid_data.ak.data.shape[0])
-    nx, ny, nz = init_utils.local_compute_size(shape)
     numpy_state = init_utils.empty_numpy_dycore_state(shape)
 
-    # Initializing to values the Fortran does for easy comparison
-    numpy_state.delp[:] = 1e30
-    numpy_state.delp[:NHALO, :NHALO] = 0.0
-    numpy_state.delp[:NHALO, NHALO + ny :] = 0.0
-    numpy_state.delp[NHALO + nx :, :NHALO] = 0.0
-    numpy_state.delp[NHALO + nx :, NHALO + ny :] = 0.0
-    numpy_state.pe[:] = 0.0
-    numpy_state.pt[:] = 1.0
-    numpy_state.ua[:] = 1e35
-    numpy_state.va[:] = 1e35
-    numpy_state.uc[:] = 1e30
-    numpy_state.vc[:] = 1e30
-    numpy_state.w[:] = 1.0e30
-    numpy_state.delz[:] = 1.0e25
-    numpy_state.phis[:] = 1.0e25
-    numpy_state.ps[:] = SURFACE_PRESSURE
-    eta = np.zeros(nz)
-    eta_v = np.zeros(nz)
-    islice, jslice, slice_3d, slice_2d = init_utils.compute_slices(nx, ny)
-    # Slices with extra buffer points in the horizontal dimension
-    # to accomodate averaging over shifted calculations on the grid
-    _, _, slice_3d_buffer, slice_2d_buffer = init_utils.compute_slices(nx + 1, ny + 1)
-
-    _init_background_state()
+    _init_background_state(numpy_state)
     _init_delta_p()
     _init_westerly_wind_burst()
     _add_easterly_wind_burst()

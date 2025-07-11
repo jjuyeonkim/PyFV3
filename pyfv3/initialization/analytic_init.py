@@ -48,6 +48,7 @@ def init_analytic_state(
         AnalyticCase.baroclinic_steady,
         AnalyticCase.tropicalcyclone,
         AnalyticCase.rossby,
+        AnalyticCase.modon3d
     ]
 
     if analytic_init_case in spherical_cases:  # type: ignore
