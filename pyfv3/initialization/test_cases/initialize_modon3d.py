@@ -183,6 +183,17 @@ def _convert_back_to_temperature(
         pt[:] = PT0
     # TODO: Which Tracers do I set to 0? q(i,j,k,1) = 0.
 
+def _init_non_hydrostatic(
+    pt,  # TODO: type
+    pe,  # TODO: type
+    delz,  # TODO: type
+    w,  # TODO: type
+):
+    delz[:, :, :-1] = (
+        constants.RDGAS * pt[:, :, :-1] / constants.GRAV * np.log(pe[:, :, :-1] / pe[:, :, 1:])
+    )  # TODO: Does this pe slice work? What about the kth delz?
+    w[:] = Float(0.0)
+
 
 def init_state(
     grid_data: GridData,
@@ -261,13 +272,12 @@ def init_state(
     # TODO: Can I ignore the NEST_TEST?
 
     if not hydrostatic:
-        numpy_state.delz[:, :, :-1] = (
-            constants.RDGAS
-            * numpy_state.pt[:, :, :-1]
-            / constants.GRAV
-            * np.log(numpy_state.pe[:, :, :-1] / numpy_state.pe[:, :, 1:])
-        )  # TODO: Does this pe slice work? What about the kth delz?
-        numpy_state.w[:] = Float(0.0)
+        _init_non_hydrostatic(
+            pt=numpy_state.pt[slice_3d],
+            pe=numpy_state.pe[slice_3d],
+            delz=numpy_state.delz[slice_3d],
+            w=numpy_state.w[slice_3d],
+        )
 
     state = DycoreState.init_from_numpy_arrays(
         numpy_state.__dict__,
