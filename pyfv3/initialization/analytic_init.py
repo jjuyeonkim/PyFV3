@@ -48,7 +48,7 @@ def init_analytic_state(
         AnalyticCase.baroclinic_steady,
         AnalyticCase.tropicalcyclone,
         AnalyticCase.rossby,
-        AnalyticCase.modon3d
+        AnalyticCase.modon3d,
     ]
 
     if analytic_init_case in spherical_cases:  # type: ignore
@@ -102,6 +102,7 @@ def init_analytic_state(
             return modon3d.init_state(
                 grid_data=grid_data,
                 quantity_factory=quantity_factory,
+                hydrostatic=hydrostatic,
                 comm=comm,
             )
         else:

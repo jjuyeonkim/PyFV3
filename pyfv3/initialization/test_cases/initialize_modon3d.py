@@ -1,4 +1,3 @@
-from types import SimpleNamespace # TODO: Is there a better way?
 import numpy as np
 
 import ndsl.constants as constants
@@ -6,25 +5,27 @@ import ndsl.dsl.gt4py_utils as utils
 from ndsl import CubedSphereCommunicator, QuantityFactory
 from ndsl.dsl.typing import Float
 from ndsl.grid import GridData
-from ndsl.grid.gnomonic import great_circle_distance_lon_lat, lon_lat_midpoint
+from ndsl.grid.gnomonic import great_circle_distance_lon_lat
 from pyfv3.dycore_state import DycoreState
 from pyfv3.initialization import init_utils
 
-# TODO: Why isn't this a class with things like NHALO passed around as member variables and _init_background_state as member functions? 
 
-SURFACE_PRESSURE = Float(1.0e5) # TODO: Same as baroclinic... how to consolidate?
+# TODO: Why isn't this a class with things like NHALO passed around as member
+# variables and _init_background_state as member functions?
+
+SURFACE_PRESSURE = Float(1.0e5)  # TODO: Same as baroclinic... how to consolidate?
 NHALO = constants.N_HALO_DEFAULT
 
 
 def _init_modon_pressure_fields(
-    eta, # TODO: Do I need?
-    eta_v, # TODO: Do I need?
+    eta,  # TODO: Do I need?
+    eta_v,  # TODO: Do I need?
     delp,
     ps,
     pe,
     peln,
     pk,
-    pkz, # TODO: Do I need?
+    pkz,  # TODO: Do I need?
     ak,
     bk,
     ptop,
@@ -33,7 +34,7 @@ def _init_modon_pressure_fields(
     pe[:] = Float(0.0)
     pk[:] = Float(1.0)
 
-    ps[:] = SURFACE_PRESSURE # TODO: This is set above, do I need this?
+    ps[:] = SURFACE_PRESSURE  # TODO: This is set above, do I need this?
     delp[:, :, :-1] = init_utils.initialize_delp(ps, ak, bk)
     pe[:] = init_utils.initialize_edge_pressure(delp, ptop)
     peln[:] = init_utils.initialize_log_pressure_interfaces(pe, ptop)
@@ -41,7 +42,7 @@ def _init_modon_pressure_fields(
     # NOTE: The modon calculation for pk looks different than baroclinic
     # (init_utils.initialize_kappa_pressures).
     pk[:] = np.zeros(pe.shape)
-    pk[:, :, 0]  = np.exp(constants.KAPPA * peln[:, :, 0 ])
+    pk[:, :, 0] = np.exp(constants.KAPPA * peln[:, :, 0])
     pk[:, :, 1:] = np.exp(constants.KAPPA * peln[:, :, 1:])
     # TODO pz may not be needed?
     # eta[:-1], eta_v[:-1] = init_utils.compute_eta(ak, bk) # TODO: Do I need this?
@@ -49,26 +50,26 @@ def _init_modon_pressure_fields(
 
 def _init_modon3d_u_v_wind(
     grid_data: GridData,
-    u, # TODO: type
-    v, # TODO: type
+    u,  # TODO: type
+    v,  # TODO: type
     lon,
     lat,
-    nx, # TODO: type
-    ny, # TODO: type
-    nz, # TODO: type
-    p0, # TODO: type
-    is_westerly: bool=True
+    nx,  # TODO: type
+    ny,  # TODO: type
+    nz,  # TODO: type
+    p0,  # TODO: type
+    is_westerly: bool = True,
 ):
     """
     TODO desc
     Args:
     """
-    #sample_quantity = grid_data.lat
-    #shape = (*sample_quantity.data.shape[0:2], grid_data.ak.data.shape[0])
-    #nx, ny, nz = init_utils.local_compute_size(shape)
+    # sample_quantity = grid_data.lat
+    # shape = (*sample_quantity.data.shape[0:2], grid_data.ak.data.shape[0])
+    # nx, ny, nz = init_utils.local_compute_size(shape)
 
-    soliton_umax = Float(50.0) # TODO: Add to config?
-    soliton_size = Float(750.0e3) # TODO: Add to config?
+    soliton_umax = Float(50.0)  # TODO: Add to config?
+    soliton_size = Float(750.0e3)  # TODO: Add to config?
 
     ubar = soliton_umax
     r0 = soliton_size
@@ -76,10 +77,7 @@ def _init_modon3d_u_v_wind(
     grid = np.transpose(
         np.stack(  # TODO: Refactor to non-protected _horizontal_data
             # TODO: Is it okay just to use the field data for this part?
-            [
-                grid_data._horizontal_data.lon.field,
-                grid_data._horizontal_data.lat.field
-            ]
+            [grid_data._horizontal_data.lon.field, grid_data._horizontal_data.lat.field]
         ),
         [1, 2, 0],
     )
@@ -96,19 +94,18 @@ def _init_modon3d_u_v_wind(
     ey = muv["eyv"]
 
     # TODO: Is this great circle distance correct?
-    r = great_circle_distance_lon_lat(
-            p3[0], p0[0],
-            p3[1], p0[1],
-            constants.RADIUS, np)[:, :, None]
+    r = great_circle_distance_lon_lat(p3[0], p0[0], p3[1], p0[1], constants.RADIUS, np)[
+        :, :, None
+    ]
     r3d = np.repeat(r, v.shape[2], axis=2)
 
-    utmp = ubar*np.exp(-(r3d/r0)**2)
-    #for k in range(0, v.shape[2]): # TODO: iterate over k better than this.
+    utmp = ubar * np.exp(-((r3d / r0) ** 2))
+    # for k in range(0, v.shape[2]): # TODO: iterate over k better than this.
     k = 0
     if is_westerly:
-        v[:,:-1,k] = utmp*np.sum(e2*ex, 2)# TODO: double-check innerprod?
+        v[:, :-1, k] = utmp * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
     else:
-        v[:,:-1,k] -= utmp*np.sum(e2*ex, 2)# TODO: double-check innerprod?
+        v[:, :-1, k] -= utmp * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
 
     # U winds
     p1 = grid[:-1, :, :]
@@ -122,46 +119,48 @@ def _init_modon3d_u_v_wind(
     ex = muv["exv"]
     ey = muv["eyv"]
 
-    #r = 1 # TODO: Get the actual great circle distance? which one?
+    # r = 1 # TODO: Get the actual great circle distance? which one?
     # TODO: Is this great circle distance correct?
-    r = great_circle_distance_lon_lat(
-            p3[0], p0[0],
-            p3[1], p0[1],
-            constants.RADIUS, np)[:, :, None]
+    r = great_circle_distance_lon_lat(p3[0], p0[0], p3[1], p0[1], constants.RADIUS, np)[
+        :, :, None
+    ]
     r3d = np.repeat(r, u.shape[2], axis=2)
 
-    utmp = ubar*np.exp(-(r3d/r0)**2)
-    #for k in range(0, v.shape[2]): # TODO: iterate over k better than this.
+    utmp = ubar * np.exp(-((r3d / r0) ** 2))
+    # for k in range(0, v.shape[2]): # TODO: iterate over k better than this.
     k = 0
     if is_westerly:
-        u[:-1,:,k] = utmp*np.sum(e2*ex, 2) # TODO: double-check innerprod?
+        u[:-1, :, k] = utmp * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
     else:
-        u[:-1,:,k] -= utmp*np.sum(e2*ex, 2) # TODO: double-check innerprod?
-
+        u[:-1, :, k] -= utmp * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
 
 
 def _init_modon3d(
     grid_data: GridData,
-    u, # TODO: type
-    v, # TODO: type
-    lon, # TODO: type
-    lat, # TODO: type
-    nx, # TODO: type
-    ny, # TODO: type
-    nz, # TODO: type
-    nsolitons: int = 2, # TODO: add to dycore config?
+    u,  # TODO: type
+    v,  # TODO: type
+    lon,  # TODO: type
+    lat,  # TODO: type
+    nx,  # TODO: type
+    ny,  # TODO: type
+    nz,  # TODO: type
+    nsolitons: int = 2,  # TODO: add to dycore config?
 ):
-    p0w = (Float(constants.PI*0.5), Float(0.))
-    p0e = (p0w[0] + constants.PI, Float(0.))
+    p0w = (Float(constants.PI * 0.5), Float(0.0))
+    p0e = (p0w[0] + constants.PI, Float(0.0))
 
     # westerly
-    _init_modon3d_u_v_wind(grid_data, u, v, lon, lat, nx, ny, nz, p0=p0w, is_westerly=True)
+    _init_modon3d_u_v_wind(
+        grid_data, u, v, lon, lat, nx, ny, nz, p0=p0w, is_westerly=True
+    )
 
     # easterly
     if nsolitons > 0:
-         #p0(1) = p0(1) + pi # TODO: Not used??
-         #p0(2) = 0. # TODO: Not used??
-        _init_modon3d_u_v_wind(grid_data, v, u, lon, lat, nx, ny, nz, p0=p0e, is_westerly=False)
+        # p0(1) = p0(1) + pi # TODO: Not used??
+        # p0(2) = 0. # TODO: Not used??
+        _init_modon3d_u_v_wind(
+            grid_data, v, u, lon, lat, nx, ny, nz, p0=p0e, is_westerly=False
+        )
 
 
 def _convert_back_to_temperature():
@@ -172,7 +171,8 @@ def init_state(
     grid_data: GridData,
     quantity_factory: QuantityFactory,
     comm: CubedSphereCommunicator,
-    nsolitons: int = 2, # TODO: add to config?
+    hydrostatic: bool,
+    nsolitons: int = 2,  # TODO: add to config?
 ) -> DycoreState:
     """
     Create a DycoreState object with quantities initialized for the
@@ -219,21 +219,31 @@ def init_state(
         ptop=grid_data.ptop,
     )
 
-    _init_modon3d(
-        grid_data,
-        u=numpy_state.u[slice_3d_buffer],
-        v=numpy_state.v[slice_3d_buffer],
-        lon=utils.asarray(grid_data.lon.data[slice_2d_buffer]),
-        lat=utils.asarray(grid_data.lat.data[slice_2d_buffer]),
-        nx=nx,
-        ny=ny,
-        nz=nz,
-        nsolitons=nsolitons
-    )
+    # _init_modon3d(
+    #     grid_data,
+    #     u=numpy_state.u[slice_3d_buffer],
+    #     v=numpy_state.v[slice_3d_buffer],
+    #     lon=utils.asarray(grid_data.lon.data[slice_2d_buffer]),
+    #     lat=utils.asarray(grid_data.lat.data[slice_2d_buffer]),
+    #     nx=nx,
+    #     ny=ny,
+    #     nz=nz,
+    #     nsolitons=nsolitons
+    # )
     _convert_back_to_temperature()
-    # Nest Test?
+    # TODO: What is NEST_TEST?
     # Delz, w calculation for non-hydrostatic?
-    
+
+    if not hydrostatic:
+        # TODO: What do I do about the delz?
+        numpy_state.delz[:, :, :-1] = (
+            constants.RDGAS
+            * numpy_state.pt[:, :, :-1]
+            / constants.GRAV
+            * np.log(numpy_state.pe[:, :, :-1] / numpy_state.pe[:, :, 1:])
+        )  # TODO: does this pe slice work?
+        numpy_state.w[:] = Float(0.0)
+
     state = DycoreState.init_from_numpy_arrays(
         numpy_state.__dict__,
         sizer=quantity_factory.sizer,
@@ -244,10 +254,10 @@ def init_state(
 
     comm.vector_halo_update(state.u, state.v, n_points=NHALO)
 
-
     return state
 
-'''
+
+"""
       else if (test_case == 45 .or. test_case == 46) then    ! NGGPS test?
 
 ! Background state
@@ -381,9 +391,6 @@ def init_state(
      enddo
      enddo
      enddo
-#else
-!     call checker_tracers(is,ie, js,je, isd,ied, jsd,jed,  &
-!                          ncnst, npz, q, agrid(is:ie,js:je,1), agrid(is:ie,js:je,2), 9., 9.)
 #endif
 
         if ( .not. hydrostatic ) then
@@ -396,5 +403,4 @@ def init_state(
                enddo
             enddo
          endif
-      else if (test_case == 55 .or. test_case == 56 .or. test_case == 57 .or. test_case == 58) then
-'''
+"""
