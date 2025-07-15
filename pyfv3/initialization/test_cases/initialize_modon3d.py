@@ -13,7 +13,8 @@ from pyfv3.initialization import init_utils
 # TODO: Why isn't this a class with things like NHALO passed around as member
 # variables and _init_background_state as member functions?
 
-SURFACE_PRESSURE = Float(1.0e5)  # TODO: Same as baroclinic... how to consolidate?
+PT0 = Float(300.0)  # Potential temperature
+P00 = Float(1.0e5)  # TODO: Same as baroclinic... how to consolidate?
 NHALO = constants.N_HALO_DEFAULT
 
 
@@ -34,7 +35,7 @@ def _init_modon_pressure_fields(
     pe[:] = Float(0.0)
     pk[:] = Float(1.0)
 
-    ps[:] = SURFACE_PRESSURE  # TODO: This is set above, do I need this?
+    ps[:] = P00  # TODO: This is set above, do I need this?
     delp[:, :, :-1] = init_utils.initialize_delp(ps, ak, bk)
     pe[:] = init_utils.initialize_edge_pressure(delp, ptop)
     peln[:] = init_utils.initialize_log_pressure_interfaces(pe, ptop)
@@ -163,8 +164,24 @@ def _init_modon3d(
         )
 
 
-def _convert_back_to_temperature():
-    pass
+def _convert_back_to_temperature(
+    peln,  # TODO: type
+    pk,  # TODO: type
+    pkz,  # TODO: type
+    pt,  # TODO: type
+    use_pt=False,  # TODO: type
+):
+    pkz[:, :, :-1] = (
+        pk[:, :, 1:] - pk[:, :, :-1]
+    ) / (
+        constants.KAPPA * (peln[:, :, 1:] - peln[:, :, :-1])
+    )  # TODO: Again, what about the kth? pkz?
+    if use_pt:
+        pt[:] = PT0 / P00 ** constants.KAPPA
+        pt[:] *= pkz[:]
+    else:
+        pt[:] = PT0
+    # TODO: Which Tracers do I set to 0? q(i,j,k,1) = 0.
 
 
 def init_state(
@@ -182,11 +199,13 @@ def init_state(
     shape = (*sample_quantity.data.shape[0:2], grid_data.ak.data.shape[0])
     numpy_state = init_utils.empty_numpy_dycore_state(shape)
 
-    # Background init for ps, phis, u, v, q
-    numpy_state.ps[:] = SURFACE_PRESSURE
+    # Background init for ps, phis, u, v, tracers
+    numpy_state.ps[:] = P00
     numpy_state.phis[:] = Float(0.0)
     numpy_state.u[:] = Float(0.0)
     numpy_state.v[:] = Float(0.0)
+
+    # TODO: How do I handle tracers again?
     numpy_state.qvapor[:] = Float(0.0)
 
     nx, ny, nz = init_utils.local_compute_size(shape)
@@ -228,20 +247,26 @@ def init_state(
     #     nx=nx,
     #     ny=ny,
     #     nz=nz,
-    #     nsolitons=nsolitons
+    #     nsolitons=nsolitons,
     # )
-    _convert_back_to_temperature()
-    # TODO: What is NEST_TEST?
-    # Delz, w calculation for non-hydrostatic?
+
+    _convert_back_to_temperature(
+        peln=numpy_state.peln[slice_3d],
+        pk=numpy_state.pk[slice_3d],
+        pkz=numpy_state.pkz[slice_3d],
+        pt=numpy_state.pt[slice_3d],
+        use_pt=False, # TODO: What is USE_PT?
+    )
+
+    # TODO: Can I ignore the NEST_TEST?
 
     if not hydrostatic:
-        # TODO: What do I do about the delz?
         numpy_state.delz[:, :, :-1] = (
             constants.RDGAS
             * numpy_state.pt[:, :, :-1]
             / constants.GRAV
             * np.log(numpy_state.pe[:, :, :-1] / numpy_state.pe[:, :, 1:])
-        )  # TODO: does this pe slice work?
+        )  # TODO: Does this pe slice work? What about the kth delz?
         numpy_state.w[:] = Float(0.0)
 
     state = DycoreState.init_from_numpy_arrays(
