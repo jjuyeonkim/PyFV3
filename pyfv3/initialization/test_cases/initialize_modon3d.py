@@ -15,113 +15,78 @@ from pyfv3.initialization import init_utils
 SURFACE_PRESSURE = Float(1.0e5) # TODO: Same as baroclinic... how to consolidate?
 NHALO = constants.N_HALO_DEFAULT
 
-def _init_background_state(numpy_state: SimpleNamespace):
-    """
-    TODO desc
-    Args:
-        numpy_state: DycoreState modified to initialize ps, phis, u, v, q
-    """
-    numpy_state.ps[:] = SURFACE_PRESSURE
-    numpy_state.phis[:] = Float(0.0)
-    numpy_state.u[:] = Float(0.0)
-    numpy_state.v[:] = Float(0.0)
-    numpy_state.qvapor[:] = Float(0.0) #TODO: Is "q" qvapor?
 
-
-def _init_modon_pressure_fields(grid_data: GridData, numpy_state: SimpleNamespace, shape: tuple):
-    """
-    TODO desc
-    Args:
-        grid_data: GridData
-        numpy_state: DycoreState modified to initialize delp, pe, peln, pk
-        shape: tuple
-    """
-    numpy_state.pe[:] = 0.0
-    numpy_state.pk[:] = 1.0
-
-    # Initialize Halo Corners
-    nx, ny, nz = init_utils.local_compute_size(shape)
-
-    # TODO: copying from baroclinic --- double-check for modon.
-    numpy_state.delp[:] = 1e30
-    numpy_state.delp[:NHALO, :NHALO] = 0.0
-    numpy_state.delp[:NHALO, NHALO + ny :] = 0.0
-    numpy_state.delp[NHALO + nx :, :NHALO] = 0.0
-    numpy_state.delp[NHALO + nx :, NHALO + ny :] = 0.0
-
+def _init_modon_pressure_fields(
+    eta, # TODO: Do I need?
+    eta_v, # TODO: Do I need?
+    delp,
+    ps,
+    pe,
+    peln,
+    pk,
+    pkz, # TODO: Do I need?
+    ak,
+    bk,
+    ptop,
+):
     # TODO: copying from baroclinic --- double-check indices for modon.
-    # TODO: is eta needed?
-    eta = np.zeros(nz)
-    eta_v = np.zeros(nz)
-    islice, jslice, slice_3d, slice_2d = init_utils.compute_slices(nx, ny)
-    # Slices with extra buffer points in the horizontal dimension
-    # to accomodate averaging over shifted calculations on the grid
-    _, _, slice_3d_buffer, slice_2d_buffer = init_utils.compute_slices(nx + 1, ny + 1)
+    pe[:] = Float(0.0)
+    pk[:] = Float(1.0)
 
-    ak=utils.asarray(grid_data.ak.data)
-    bk=utils.asarray(grid_data.bk.data)
-    ptop=grid_data.ptop
+    ps[:] = SURFACE_PRESSURE # TODO: This is set above, do I need this?
+    delp[:, :, :-1] = init_utils.initialize_delp(ps, ak, bk)
+    pe[:] = init_utils.initialize_edge_pressure(delp, ptop)
+    peln[:] = init_utils.initialize_log_pressure_interfaces(pe, ptop)
 
-    # TODO: see if you can simplify... for now slice first and then use unit_utils
-
-    ps_slice_2d = numpy_state.ps[slice_2d]
-    ps_slice_2d[:] = SURFACE_PRESSURE # TODO: This is set above, do I need this?
-
-    delp_slice_3d = numpy_state.delp[slice_3d]
-    delp_slice_3d[:, :, :-1] = init_utils.initialize_delp(ps_slice_2d, ak, bk)
-
-    pe_slice_3d = numpy_state.pe[slice_3d]
-    pe_slice_3d[:] = init_utils.initialize_edge_pressure(delp_slice_3d, ptop)
-
-    peln_slice_3d = numpy_state.peln[slice_3d]
-    peln_slice_3d[:] = init_utils.initialize_log_pressure_interfaces(pe_slice_3d, ptop)
-
-    # pk looks different than baroclinic, so that's why I'm pulling it out.
-    pk_slice_3d=numpy_state.pk[slice_3d]
-    pk_slice_3d[:] = np.zeros(pe_slice_3d.shape)
-    pk_slice_3d[:, :, 0]  = np.exp(constants.KAPPA * peln_slice_3d[:, :, 0 ])
-    pk_slice_3d[:, :, 1:] = np.exp(constants.KAPPA * peln_slice_3d[:, :, 1:])
+    # NOTE: The modon calculation for pk looks different than baroclinic
+    # (init_utils.initialize_kappa_pressures).
+    pk[:] = np.zeros(pe.shape)
+    pk[:, :, 0]  = np.exp(constants.KAPPA * peln[:, :, 0 ])
+    pk[:, :, 1:] = np.exp(constants.KAPPA * peln[:, :, 1:])
+    # TODO pz may not be needed?
+    # eta[:-1], eta_v[:-1] = init_utils.compute_eta(ak, bk) # TODO: Do I need this?
 
 
-def _init_westerly_wind_burst(grid_data: GridData, numpy_state: SimpleNamespace, shape: tuple):
+def _init_modon3d_u_v_wind(
+    grid_data: GridData,
+    u, # TODO: type
+    v, # TODO: type
+    lon,
+    lat,
+    nx, # TODO: type
+    ny, # TODO: type
+    nz, # TODO: type
+    p0, # TODO: type
+    is_westerly: bool=True
+):
     """
     TODO desc
     Args:
-        grid_data: GridData
-        numpy_state: DycoreState modified to initiate u, v westerly winds
-        shape: tuple
     """
-    soliton_umax = Float(50.0)
-    soliton_size = Float(750.0e3)
+    #sample_quantity = grid_data.lat
+    #shape = (*sample_quantity.data.shape[0:2], grid_data.ak.data.shape[0])
+    #nx, ny, nz = init_utils.local_compute_size(shape)
+
+    soliton_umax = Float(50.0) # TODO: Add to config?
+    soliton_size = Float(750.0e3) # TODO: Add to config?
 
     ubar = soliton_umax
     r0 = soliton_size
 
-    p0w = (Float(constants.PI*0.5), Float(0.))
-    p0e = (p0w[0] + constants.PI, Float(0.))
-
-    # Calculate helper slices for delp, u+v winds
-    # similar to init_utils.compute_slices(nx, ny)
-    nx, ny, nz = init_utils.local_compute_size(shape)
-    islice = slice(NHALO, NHALO + nx)
-    islice_xtra = slice(NHALO, NHALO + nx + 1)
-    jslice = slice(NHALO, NHALO + ny)
-    jslice_xtra = slice(NHALO, NHALO + ny + 1)
-
-   # TODO: Add the p1, p2 grid pairs to the init_utils?
     grid = np.transpose(
         np.stack(  # TODO: Refactor to non-protected _horizontal_data
-            [grid_data._horizontal_data.lon.data, grid_data._horizontal_data.lat.data]
+            # TODO: Is it okay just to use the field data for this part?
+            [
+                grid_data._horizontal_data.lon.field,
+                grid_data._horizontal_data.lat.field
+            ]
         ),
         [1, 2, 0],
     )
 
-    p1 = grid[:-1, :, :]
-    p2 = grid[1:, :, :]
-    u_2d_buffer = (islice, jslice_xtra)
-    u_buffer_0 = (islice, jslice_xtra, 0)
-    #numpy_state.u[u_buffer_0] = _calc_modon_wind_burst(p1, p2)[u_2d_buffer]
-
+    # V winds
+    p1 = grid[:, :-1, :]
+    p2 = grid[:, 1:, :]
     muv = init_utils._find_midpoint_unit_vectors(
         p1, p2
     )  # TODO: Refactor to non-protected call
@@ -130,66 +95,84 @@ def _init_westerly_wind_burst(grid_data: GridData, numpy_state: SimpleNamespace,
     ex = muv["exv"]
     ey = muv["eyv"]
 
-    #r = great_circle_distance_lon_lat?
-    r = 1 # TODO: Get the actual great circle distance? which one?
-    #r = great_circle_dist( p0w, p3, radius )
+    # TODO: Is this great circle distance correct?
+    r = great_circle_distance_lon_lat(
+            p3[0], p0[0],
+            p3[1], p0[1],
+            constants.RADIUS, np)[:, :, None]
+    r3d = np.repeat(r, v.shape[2], axis=2)
 
-    utmp = ubar*np.exp(-(r/r0)**2)
-    #call get_unit_vect2(p1, p2, e2)
-    #call get_latlon_vector(p3, ex, ey)
-    # TODO: iterate over k --- numpy_state.v[:, :, k] = utmp*np.sum(e2*ex, 2) # TODO: set a slice instead of the entire thing? # TODO: double-check innerprod?
+    utmp = ubar*np.exp(-(r3d/r0)**2)
+    #for k in range(0, v.shape[2]): # TODO: iterate over k better than this.
+    k = 0
+    if is_westerly:
+        v[:,:-1,k] = utmp*np.sum(e2*ex, 2)# TODO: double-check innerprod?
+    else:
+        v[:,:-1,k] -= utmp*np.sum(e2*ex, 2)# TODO: double-check innerprod?
 
-    """
-! Initiate the westerly-wind-burst:
-         ubar = soliton_Umax
-         r0 = soliton_size
-         p0w(1) = pi*0.5
-         p0w(2) = 0.
-         p0e(1) = p0w(1) + pi
-         p0e(2) = 0.
+    # U winds
+    p1 = grid[:-1, :, :]
+    p2 = grid[1:, :, :]
+    muv = init_utils._find_midpoint_unit_vectors(
+        p1, p2
+    )  # TODO: Refactor to non-protected call
 
+    p3 = muv["midpoint"]
+    e2 = muv["unit_dir"]
+    ex = muv["exv"]
+    ey = muv["eyv"]
 
-     do k=1,npz
-        do j=js,je
-           do i=is,ie+1
-              p1(:) = grid(i  ,j ,1:2)
-              p2(:) = grid(i,j+1 ,1:2)
-              call mid_pt_sphere(p1, p2, p3)
-              r = great_circle_dist( p0w, p3, radius )
-              utmp = ubar*exp(-(r/r0)**2)
-              call get_unit_vect2(p1, p2, e2)
-              call get_latlon_vector(p3, ex, ey)
-              v(i,j,k) = utmp*inner_prod(e2,ex)
-           enddo
-        enddo
-        do j=js,je+1
-           do i=is,ie
-              p1(:) = grid(i,  j,1:2)
-              p2(:) = grid(i+1,j,1:2)
-              call mid_pt_sphere(p1, p2, p3)
-              r = great_circle_dist( p0w, p3, radius )
-              utmp = ubar*exp(-(r/r0)**2)
-              call get_unit_vect2(p1, p2, e1)
-              call get_latlon_vector(p3, ex, ey)
-              u(i,j,k) = utmp*inner_prod(e1,ex)
-           enddo
-        enddo
-    """
-    pass
+    #r = 1 # TODO: Get the actual great circle distance? which one?
+    # TODO: Is this great circle distance correct?
+    r = great_circle_distance_lon_lat(
+            p3[0], p0[0],
+            p3[1], p0[1],
+            constants.RADIUS, np)[:, :, None]
+    r3d = np.repeat(r, u.shape[2], axis=2)
+
+    utmp = ubar*np.exp(-(r3d/r0)**2)
+    #for k in range(0, v.shape[2]): # TODO: iterate over k better than this.
+    k = 0
+    if is_westerly:
+        u[:-1,:,k] = utmp*np.sum(e2*ex, 2) # TODO: double-check innerprod?
+    else:
+        u[:-1,:,k] -= utmp*np.sum(e2*ex, 2) # TODO: double-check innerprod?
 
 
-def _init_easterly_wind_burst():
-   pass
+
+def _init_modon3d(
+    grid_data: GridData,
+    u, # TODO: type
+    v, # TODO: type
+    lon, # TODO: type
+    lat, # TODO: type
+    nx, # TODO: type
+    ny, # TODO: type
+    nz, # TODO: type
+    nsolitons: int = 2, # TODO: add to dycore config?
+):
+    p0w = (Float(constants.PI*0.5), Float(0.))
+    p0e = (p0w[0] + constants.PI, Float(0.))
+
+    # westerly
+    _init_modon3d_u_v_wind(grid_data, u, v, lon, lat, nx, ny, nz, p0=p0w, is_westerly=True)
+
+    # easterly
+    if nsolitons > 0:
+         #p0(1) = p0(1) + pi # TODO: Not used??
+         #p0(2) = 0. # TODO: Not used??
+        _init_modon3d_u_v_wind(grid_data, v, u, lon, lat, nx, ny, nz, p0=p0e, is_westerly=False)
 
 
 def _convert_back_to_temperature():
-   pass
+    pass
 
 
 def init_state(
     grid_data: GridData,
     quantity_factory: QuantityFactory,
     comm: CubedSphereCommunicator,
+    nsolitons: int = 2, # TODO: add to config?
 ) -> DycoreState:
     """
     Create a DycoreState object with quantities initialized for the
@@ -199,10 +182,54 @@ def init_state(
     shape = (*sample_quantity.data.shape[0:2], grid_data.ak.data.shape[0])
     numpy_state = init_utils.empty_numpy_dycore_state(shape)
 
-    _init_background_state(numpy_state)
-    _init_modon_pressure_fields(grid_data, numpy_state, shape)
-    _init_westerly_wind_burst(grid_data, numpy_state, shape)
-    _init_easterly_wind_burst()
+    # Background init for ps, phis, u, v, q
+    numpy_state.ps[:] = SURFACE_PRESSURE
+    numpy_state.phis[:] = Float(0.0)
+    numpy_state.u[:] = Float(0.0)
+    numpy_state.v[:] = Float(0.0)
+    numpy_state.qvapor[:] = Float(0.0)
+
+    nx, ny, nz = init_utils.local_compute_size(shape)
+
+    # TODO: copying from baroclinic --- double-check for modon.
+    numpy_state.delp[:] = Float(1e30)
+    numpy_state.delp[:NHALO, :NHALO] = Float(0.0)
+    numpy_state.delp[:NHALO, NHALO + ny :] = Float(0.0)
+    numpy_state.delp[NHALO + nx :, :NHALO] = Float(0.0)
+    numpy_state.delp[NHALO + nx :, NHALO + ny :] = Float(0.0)
+
+    eta = np.zeros(nz)
+    eta_v = np.zeros(nz)
+    islice, jslice, slice_3d, slice_2d = init_utils.compute_slices(nx, ny)
+    # Slices with extra buffer points in the horizontal dimension
+    # to accomodate averaging over shifted calculations on the grid
+    _, _, slice_3d_buffer, slice_2d_buffer = init_utils.compute_slices(nx + 1, ny + 1)
+
+    _init_modon_pressure_fields(
+        eta=eta,
+        eta_v=eta_v,
+        delp=numpy_state.delp[slice_3d],
+        ps=numpy_state.ps[slice_2d],
+        pe=numpy_state.pe[slice_3d],
+        peln=numpy_state.peln[slice_3d],
+        pk=numpy_state.pk[slice_3d],
+        pkz=numpy_state.pkz[slice_3d],
+        ak=utils.asarray(grid_data.ak.data),
+        bk=utils.asarray(grid_data.bk.data),
+        ptop=grid_data.ptop,
+    )
+
+    _init_modon3d(
+        grid_data,
+        u=numpy_state.u[slice_3d_buffer],
+        v=numpy_state.v[slice_3d_buffer],
+        lon=utils.asarray(grid_data.lon.data[slice_2d_buffer]),
+        lat=utils.asarray(grid_data.lat.data[slice_2d_buffer]),
+        nx=nx,
+        ny=ny,
+        nz=nz,
+        nsolitons=nsolitons
+    )
     _convert_back_to_temperature()
     # Nest Test?
     # Delz, w calculation for non-hydrostatic?
