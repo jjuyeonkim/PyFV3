@@ -5,7 +5,7 @@ import ndsl.dsl.gt4py_utils as utils
 from ndsl import CubedSphereCommunicator, QuantityFactory
 from ndsl.dsl.typing import Float
 from ndsl.grid import GridData
-from ndsl.grid.gnomonic import great_circle_distance_lon_lat
+from ndsl.grid.gnomonic import great_circle_distance_lon_lat, lon_lat_midpoint
 from pyfv3.dycore_state import DycoreState
 from pyfv3.initialization import init_utils
 
@@ -84,6 +84,11 @@ def _init_modon3d_u_v_wind(
     )
 
     # V winds
+    axis = 1
+    upper = (slice(None),) * axis + (slice(0, -1),) # TODO jk WHAT IS THIS?
+    lower = (slice(None),) * axis + (slice(1, None),) # TODO jk WHAT IS THIS?
+    mp1, mp2 = lon_lat_midpoint(lon[upper], lon[lower], lat[upper], lat[lower], np)
+
     p1 = grid[:, :-1, :]
     p2 = grid[:, 1:, :]
     muv = init_utils._find_midpoint_unit_vectors(
@@ -95,20 +100,26 @@ def _init_modon3d_u_v_wind(
     ey = muv["eyv"]
 
     # TODO: Is this great circle distance correct?
-    r = great_circle_distance_lon_lat(p3[0], p0[0], p3[1], p0[1], constants.RADIUS, np)[
+    r = np.zeros((v.shape[0], v.shape[1], 1))
+    #r = great_circle_distance_lon_lat(p0[0], p3[0], p0[1], p3[1], constants.RADIUS, np)[
+    r = great_circle_distance_lon_lat(p0[0], mp1, p0[1], mp2, constants.RADIUS, np)[
         :, :, None
     ]
     r3d = np.repeat(r, v.shape[2], axis=2)
 
-    utmp = ubar * np.exp(-((r3d / r0) ** 2))
+    utmp = ubar * np.exp(-((r3d / r0) ** 2))  # TODO: Why is the r3d needed instead of r?
     # for k in range(0, v.shape[2]): # TODO: iterate over k better than this.
     k = 0
     if is_westerly:
-        v[:, :-1, k] = utmp * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
+        v[:, :-1, k] = utmp[:,:,k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
     else:
-        v[:, :-1, k] -= utmp * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
+        v[:, :-1, k] -= utmp[:,:,k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
 
     # U winds
+    axis = 0
+    upper = (slice(None),) * axis + (slice(0, -1),) # TODO jk WHAT IS THIS?
+    lower = (slice(None),) * axis + (slice(1, None),) # TODO jk WHAT IS THIS?
+    mp1, mp2 = lon_lat_midpoint(lon[upper], lon[lower], lat[upper], lat[lower], np)
     p1 = grid[:-1, :, :]
     p2 = grid[1:, :, :]
     muv = init_utils._find_midpoint_unit_vectors(
@@ -122,7 +133,8 @@ def _init_modon3d_u_v_wind(
 
     # r = 1 # TODO: Get the actual great circle distance? which one?
     # TODO: Is this great circle distance correct?
-    r = great_circle_distance_lon_lat(p3[0], p0[0], p3[1], p0[1], constants.RADIUS, np)[
+    #r = great_circle_distance_lon_lat(p3[0], p0[0], p3[1], p0[1], constants.RADIUS, np)[
+    r = great_circle_distance_lon_lat(p0[0], mp1, p0[1], mp2, constants.RADIUS, np)[
         :, :, None
     ]
     r3d = np.repeat(r, u.shape[2], axis=2)
@@ -131,12 +143,12 @@ def _init_modon3d_u_v_wind(
     # for k in range(0, v.shape[2]): # TODO: iterate over k better than this.
     k = 0
     if is_westerly:
-        u[:-1, :, k] = utmp * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
+        u[:-1, :, k] = utmp[:, :, k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
     else:
-        u[:-1, :, k] -= utmp * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
+        u[:-1, :, k] -= utmp[:, :, k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
 
 
-def _init_modon3d(
+def _init_modon3d_east_west_winds(
     grid_data: GridData,
     u,  # TODO: type
     v,  # TODO: type
@@ -147,10 +159,8 @@ def _init_modon3d(
     nz,  # TODO: type
     nsolitons: int = 2,  # TODO: add to dycore config?
 ):
-    p0w = (Float(constants.PI * 0.5), Float(0.0))
-    p0e = (p0w[0] + constants.PI, Float(0.0))
-
     # westerly
+    p0w = (Float(constants.PI * 0.5), Float(0.0))
     _init_modon3d_u_v_wind(
         grid_data, u, v, lon, lat, nx, ny, nz, p0=p0w, is_westerly=True
     )
@@ -159,6 +169,7 @@ def _init_modon3d(
     if nsolitons > 0:
         # p0(1) = p0(1) + pi # TODO: Not used??
         # p0(2) = 0. # TODO: Not used??
+        p0e = (p0w[0] + constants.PI, Float(0.0))
         _init_modon3d_u_v_wind(
             grid_data, v, u, lon, lat, nx, ny, nz, p0=p0e, is_westerly=False
         )
@@ -182,6 +193,7 @@ def _convert_back_to_temperature(
     else:
         pt[:] = PT0
     # TODO: Which Tracers do I set to 0? q(i,j,k,1) = 0.
+
 
 def _init_non_hydrostatic(
     pt,  # TODO: type
@@ -249,17 +261,17 @@ def init_state(
         ptop=grid_data.ptop,
     )
 
-    # _init_modon3d(
-    #     grid_data,
-    #     u=numpy_state.u[slice_3d_buffer],
-    #     v=numpy_state.v[slice_3d_buffer],
-    #     lon=utils.asarray(grid_data.lon.data[slice_2d_buffer]),
-    #     lat=utils.asarray(grid_data.lat.data[slice_2d_buffer]),
-    #     nx=nx,
-    #     ny=ny,
-    #     nz=nz,
-    #     nsolitons=nsolitons,
-    # )
+    _init_modon3d_east_west_winds(
+        grid_data,
+        u=numpy_state.u[slice_3d_buffer],
+        v=numpy_state.v[slice_3d_buffer],
+        lon=utils.asarray(grid_data.lon.data[slice_2d_buffer]),
+        lat=utils.asarray(grid_data.lat.data[slice_2d_buffer]),
+        nx=nx,
+        ny=ny,
+        nz=nz,
+        nsolitons=nsolitons,
+    )
 
     _convert_back_to_temperature(
         peln=numpy_state.peln[slice_3d],
