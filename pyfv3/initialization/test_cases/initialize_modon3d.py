@@ -108,12 +108,13 @@ def _init_modon3d_u_v_wind(
     r3d = np.repeat(r, v.shape[2], axis=2)
 
     utmp = ubar * np.exp(-((r3d / r0) ** 2))  # TODO: Why is the r3d needed instead of r?
-    # for k in range(0, v.shape[2]): # TODO: iterate over k better than this.
-    k = 0
+    #k = 0
     if is_westerly:
-        v[:, :-1, k] = utmp[:,:,k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
+        #v[:, :-1, k] = utmp[:,:,k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod? TODO v[:,:-1,k]?
+        v[:, :-1, :] = utmp * np.sum(e2 * ex, 2)[:,:,np.newaxis]  # TODO: double-check innerprod? TODO v[:,:-1,k]?
     else:
-        v[:, :-1, k] -= utmp[:,:,k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
+        #v[:, :-1, k] -= utmp[:,:,k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod? TODO v[:,:-1,k]?
+        v[:, :-1, :] -= utmp * np.sum(e2 * ex, 2)[:,:,np.newaxis]  # TODO: double-check innerprod? TODO v[:,:-1,k]?
 
     # U winds
     axis = 0
@@ -140,12 +141,13 @@ def _init_modon3d_u_v_wind(
     r3d = np.repeat(r, u.shape[2], axis=2)
 
     utmp = ubar * np.exp(-((r3d / r0) ** 2))
-    # for k in range(0, v.shape[2]): # TODO: iterate over k better than this.
-    k = 0
+    #k = 0
     if is_westerly:
-        u[:-1, :, k] = utmp[:, :, k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
+        #u[:-1, :, k] = utmp[:, :, k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod? TODO u[:-1,:,k]?
+        u[:-1, :, :] = utmp * np.sum(e2 * ex, 2)[:,:,np.newaxis]  # TODO: double-check innerprod? TODO u[:-1,:,k]?
     else:
-        u[:-1, :, k] -= utmp[:, :, k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod?
+        #u[:-1, :, k] -= utmp[:, :, k] * np.sum(e2 * ex, 2)  # TODO: double-check innerprod? TODO u[:-1,:,k]?
+        u[:-1, :, :] -= utmp * np.sum(e2 * ex, 2)[:,:,np.newaxis]  # TODO: double-check innerprod? TODO u[:-1,:,k]?
 
 
 def _init_modon3d_east_west_winds(
