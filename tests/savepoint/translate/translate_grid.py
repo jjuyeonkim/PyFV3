@@ -224,7 +224,7 @@ class TranslateGridAreas(ParallelTranslateGrid):
             npz=1,
             communicator=communicator,
             backend=self.stencil_factory.backend,
-        ) # Note: default dx_const, dy_const, deglat
+        )  # Note: default dx_const, dy_const, deglat
 
         in_state = self.state_from_inputs(inputs)
         grid_generator._grid.data[:] = in_state["grid"].data[:]
@@ -2308,7 +2308,7 @@ class TranslateInitGridUtils(ParallelTranslateGrid):
             communicator=communicator,
             backend=self.stencil_factory.backend,
             grid_type=self.config.grid_type,
-        ) # Note: default dx_const, dy_const, deglat
+        )  # Note: default dx_const, dy_const, deglat
         input_state = self.state_from_inputs(inputs)
         grid_generator._grid = input_state["grid"]
         grid_generator._agrid = input_state["agrid"]

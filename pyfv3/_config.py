@@ -13,6 +13,11 @@ DEFAULT_INT = 0
 DEFAULT_STR = ""
 DEFAULT_FLOAT = 0.0
 DEFAULT_BOOL = False
+DEFAULT_NML_GROUPS = (
+    "main_nml",
+    "coupler_nml",
+    "fv_core_nml",
+)  # TODO Double-check for any additional groups
 
 
 @dataclasses.dataclass(frozen=True)
@@ -272,14 +277,21 @@ class DynamicalCoreConfig:
         return cls.from_f90nml(namelist)
 
     @classmethod
-    def from_f90nml(cls, namelist: f90nml.Namelist) -> "DynamicalCoreConfig":
-        """TODO"""
-
-        # TODO Double-check for any additional groups
-        # TODO Make target_groups constant above?
+    def from_f90nml(
+        cls, namelist: f90nml.Namelist, target_groups=None
+    ) -> "DynamicalCoreConfig":
+        """This creates a DynamicalCoreConfig using the input namelist.
+        Args:
+            namelist
+            target_groups - If None , then the DEFAULT_NML_GROUPS will be used to populate the dataclass fields.
+        """
         namelist = Namelist(namelist)
-        target_groups = ["main_nml", "coupler_nml", "fv_core_nml"]
-        namelist_dict = namelist.namelist_groups_to_flatish_dict(target_groups)
+        if target_groups is None:
+            groups = DEFAULT_NML_GROUPS
+        else:
+            groups = target_groups
+
+        namelist_dict = namelist.namelist_groups_to_flatish_dict(groups)
         namelist_dict = {
             key: value
             for key, value in namelist_dict.items()

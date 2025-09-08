@@ -8,7 +8,7 @@ import ndsl.dsl.gt4py_utils as utils
 import pyfv3.initialization.analytic_init as analytic_init
 import pyfv3.initialization.init_utils as init_utils
 import pyfv3.initialization.test_cases.initialize_baroclinic as baroclinic_init
-from ndsl import Quantity, QuantityFactory, Namelist, StencilFactory, SubtileGridSizer
+from ndsl import Namelist, Quantity, QuantityFactory, StencilFactory, SubtileGridSizer
 from ndsl.constants import (
     N_HALO_DEFAULT,
     X_DIM,
