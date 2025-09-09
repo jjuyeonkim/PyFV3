@@ -270,11 +270,15 @@ class DynamicalCoreConfig:
         if self.grid_type > 3:
             self.nf_omega = 0
 
-    # TODO: Consider swapping from_namelist and from_f90nml implementations?
-    # They somehow don't seem right.
+    # TODO: Consider removing from_namelist or from_f90nml. Duplicates.
     @classmethod
-    def from_namelist(cls, namelist: Namelist) -> "DynamicalCoreConfig":
-        return cls.from_f90nml(namelist)
+    def from_namelist(
+        cls, namelist: Namelist, target_groups=None
+    ) -> "DynamicalCoreConfig":
+        """This creates a DynamicalCoreConfig using the input namelist. 
+        Duplicate of from_f90nml.
+        """
+        return cls.from_f90nml(namelist, target_groups=target_groups)
 
     @classmethod
     def from_f90nml(
@@ -283,7 +287,7 @@ class DynamicalCoreConfig:
         """This creates a DynamicalCoreConfig using the input namelist.
         Args:
             namelist
-            target_groups - If None , then the DEFAULT_NML_GROUPS will be used to populate the dataclass fields.
+            target_groups - If None, then the DEFAULT_NML_GROUPS will be used to populate the dataclass fields.
         """
         namelist = Namelist(namelist)
         if target_groups is None:
