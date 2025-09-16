@@ -22,6 +22,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          submodules: 'recursive'
+          ref: 20250908_namelist_4_CI_TEST
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
