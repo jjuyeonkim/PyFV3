@@ -67,9 +67,12 @@ jobs:
         run: |
           cd ${GITHUB_WORKSPACE}/pyFV3
           cd NDSL && pip3 install .[test] && cd ../
-          pip3 install .[test]
 
-      - name: Install pyFV3 packages cd ${GITHUB_WORKSPACE}/pyFV3 pip install .[ndsl,test]
+      - name: Install pyFV3 packages
+        run: |
+          cd ${GITHUB_WORKSPACE}/pyFV3
+          pip install .[ndsl,test]
+
 
       # Only restore (don't save) caches on PRs. New caches created from PRs won't be
       # accessible from other PRs, see workflows/create_cache.yaml.
