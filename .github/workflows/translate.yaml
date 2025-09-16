@@ -54,7 +54,7 @@ jobs:
           submodules: 'recursive'
           # TODO: Revert tests back to GFDL (not jjuyeonkim) after merging https://github.com/NOAA-GFDL/NDSL/issues/64
           repository: jjuyeonkim/pyFV3
-          ref: 20250908_namelist_2
+          ref: 20250908_namelist_4_CI_TEST
           path: pyFV3
 
       - name: Checkout hash that triggered CI
@@ -62,6 +62,7 @@ jobs:
         with:
           submodules: 'recursive'
           path: pyFV3/${{inputs.component_name}}
+          ref: 20250908_namelist_4_CI_TEST
 
       - name: External trigger install NDSL packages
         if: ${{inputs.component_trigger}}
