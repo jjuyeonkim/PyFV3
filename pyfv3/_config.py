@@ -7,8 +7,9 @@ from typing import Optional, Tuple
 
 import f90nml
 import yaml
-from dacite import Config, from_dict
+from dacite import Config as DaciteConfig, from_dict # TODO: better alternatives to DaciteConfig?
 
+from ndsl.config import Config, register_config
 from ndsl.utils import f90nml_as_dict
 
 
@@ -160,8 +161,9 @@ class AcousticDynamicsConfig:
         return self.riemann.use_logp
 
 
-@dataclasses.dataclass
-class DynamicalCoreConfig:
+@register_config("DynamicalCoreConfig")
+@dataclasses.dataclass(kw_only=True)  # TODO: Is kw_only necessary?
+class DynamicalCoreConfig(Config):
     dt_atmos: int = DEFAULT_INT
     n_steps: int = 1
     a_imp: float = DEFAULT_FLOAT
@@ -337,7 +339,7 @@ class DynamicalCoreConfig:
         # NOTE: We're setting strict to False so that extra keys in the data are
         # ignored. Eventually, we'd like to turn this to True once we move away from
         # expecting dicts that are basically flattened yamls and f90nml files.
-        dacite_config = Config(
+        dacite_config = DaciteConfig(
             strict=False,
             type_hooks={
                 Tuple[int, int]: lambda x: tuple(x),
