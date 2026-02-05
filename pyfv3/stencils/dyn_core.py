@@ -468,7 +468,11 @@ class AcousticDynamics:
                 use_logp=config.use_logp,
             )
         )
-        self._akap = Float(constants.KAPPA)
+        if config.sw_dynamics:
+            self._akap = Float(1.0)
+            self._pfull[0] = 0.5 * self._pfull
+        else:
+            self._akap = Float(constants.KAPPA)
 
         temporaries = dyncore_temporaries(quantity_factory)
         self._heat_source = temporaries["heat_source"]
@@ -612,7 +616,7 @@ class AcousticDynamics:
                 rarea=grid_data.rarea,
                 nmax=nf_ke,
             )
-        if config.rf_fast:
+        if config.rf_fast and not config.sw_dynamics:
             self._rayleigh_damping = ray_fast.RayleighDamping(
                 stencil_factory,
                 rf_cutoff=config.rf_cutoff,
@@ -979,7 +983,7 @@ class AcousticDynamics:
                     self._akap,
                 )
 
-            if self.config.rf_fast:
+            if self.config.rf_fast and not self.config.sw_dynamics:
                 # TODO: Pass through ks, or remove, inconsistent representation vs
                 # Fortran.
                 self._rayleigh_damping(

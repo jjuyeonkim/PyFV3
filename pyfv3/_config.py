@@ -119,6 +119,8 @@ class AcousticDynamicsConfig:
     """
     mainly for backwards compatibility, not really used anymore
     """
+    sw_dynamics: bool
+    """enables shallow water conditions"""
     riemann: RiemannConfig
     d_grid_shallow_water: DGridShallowWaterLagrangianDynamicsConfig
 
@@ -283,7 +285,7 @@ class DynamicalCoreConfig:
     fv_sg_adj: int = -1
     n_sponge: int = 1
     sw_dynamics: bool = False
-    """shallow water conditions"""
+    """enables shallow water conditions"""
     namelist_override: str | None = None
     target_nml_groups: tuple[str, ...] | None = DEFAULT_DYCORE_NML_GROUPS
 
@@ -451,6 +453,7 @@ class DynamicalCoreConfig:
             use_old_omega=self.use_old_omega,
             riemann=self.riemann,
             d_grid_shallow_water=self.d_grid_shallow_water,
+            sw_dynamics=self.sw_dynamics,
         )
 
     @property

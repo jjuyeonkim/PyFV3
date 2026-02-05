@@ -554,76 +554,77 @@ class DynamicalCore:
             # 2 and 3 are also simple baroclinic models that don't need
             # vertical remapping. > 4 implies this is a full physics model
             if self.grid_indexing.domain[2] > 4:
-                # nq is actually given by ncnst - pnats,
-                # where those are given in atmosphere.F90 by:
-                # ncnst = Atm(mytile)%ncnst
-                # pnats = Atm(mytile)%flagstruct%pnats
-                # here we hard-coded it because 8 is the only supported value,
-                # refactor this later!
+                if not self.config.sw_dynamics:
+                    # nq is actually given by ncnst - pnats,
+                    # where those are given in atmosphere.F90 by:
+                    # ncnst = Atm(mytile)%ncnst
+                    # pnats = Atm(mytile)%flagstruct%pnats
+                    # here we hard-coded it because 8 is the only supported value,
+                    # refactor this later!
 
-                # do_omega = self.namelist.hydrostatic and last_step
-                # TODO: Determine a better way to do this, polymorphic fields perhaps?
-                # issue is that set_val in map_single expects a 3D field for the
-                # "surface" array
-                if __debug__:
-                    log_on_rank_0("Remapping")
-                with timer.clock("Remapping"):
-                    self._checkpoint_remapping_in(state)
+                    # do_omega = self.namelist.hydrostatic and last_step
+                    # TODO: Determine a better way to do this, polymorphic fields perhaps?
+                    # issue is that set_val in map_single expects a 3D field for the
+                    # "surface" array
+                    if __debug__:
+                        log_on_rank_0("Remapping")
+                    with timer.clock("Remapping"):
+                        self._checkpoint_remapping_in(state)
 
-                    # TODO: When NQ=9, we shouldn't need to pass qcld explicitly
-                    #       since it's in self.tracers. It should not be an issue since
-                    #       we don't have self.tracers & qcld computation at the same
-                    #       time
-                    #       When NQ=8, we do need qcld passed explicitely
-                    self._lagrangian_to_eulerian_obj(
-                        self.tracers,
-                        state.pt,
-                        state.delp,
-                        state.delz,
-                        state.peln,
-                        state.u,
-                        state.v,
-                        state.w,
-                        self._cappa,
-                        state.q_con,
-                        state.qcld,
-                        state.pkz,
-                        state.pk,
-                        state.pe,
-                        state.phis,
-                        state.ps,
-                        self._wsd,
-                        self._ak,
-                        self._bk,
-                        self._dp_initial,
-                        self._ptop,
-                        KAPPA,
-                        ZVIR,
-                        last_step,
-                        self._conserve_total_energy,
-                        self._timestep / self._k_split,
-                    )
-                    self._checkpoint_remapping_out(state)
-                # TODO: can we pull this block out of the loop intead of
-                # using an if-statement?
-                if last_step:
-                    da_min: Float = self._get_da_min()
-                    if not self.config.hydrostatic:
-                        if __debug__:
-                            log_on_rank_0("Omega")
-                        # TODO: GFDL should implement the "vulcan omega" update,
-                        # use hydrostatic omega instead of this conversion
-                        self._omega_from_w(
+                        # TODO: When NQ=9, we shouldn't need to pass qcld explicitly
+                        #       since it's in self.tracers. It should not be an issue since
+                        #       we don't have self.tracers & qcld computation at the same
+                        #       time
+                        #       When NQ=8, we do need qcld passed explicitely
+                        self._lagrangian_to_eulerian_obj(
+                            self.tracers,
+                            state.pt,
                             state.delp,
                             state.delz,
+                            state.peln,
+                            state.u,
+                            state.v,
                             state.w,
-                            state.omga,
+                            self._cappa,
+                            state.q_con,
+                            state.qcld,
+                            state.pkz,
+                            state.pk,
+                            state.pe,
+                            state.phis,
+                            state.ps,
+                            self._wsd,
+                            self._ak,
+                            self._bk,
+                            self._dp_initial,
+                            self._ptop,
+                            KAPPA,
+                            ZVIR,
+                            last_step,
+                            self._conserve_total_energy,
+                            self._timestep / self._k_split,
                         )
-                    if self.config.nf_omega > 0:
-                        if __debug__:
-                            log_on_rank_0("Del2Cubed")
-                        self._omega_halo_updater.update()
-                        self._hyperdiffusion(state.omga, 0.18 * da_min)
+                        self._checkpoint_remapping_out(state)
+                    # TODO: can we pull this block out of the loop intead of
+                    # using an if-statement?
+                    if last_step:
+                        da_min: Float = self._get_da_min()
+                        if not self.config.hydrostatic:
+                            if __debug__:
+                                log_on_rank_0("Omega")
+                            # TODO: GFDL should implement the "vulcan omega" update,
+                            # use hydrostatic omega instead of this conversion
+                            self._omega_from_w(
+                                state.delp,
+                                state.delz,
+                                state.w,
+                                state.omga,
+                            )
+                        if self.config.nf_omega > 0:
+                            if __debug__:
+                                log_on_rank_0("Del2Cubed")
+                            self._omega_halo_updater.update()
+                            self._hyperdiffusion(state.omga, 0.18 * da_min)
 
         if __debug__:
             log_on_rank_0("Neg Adj 3")
