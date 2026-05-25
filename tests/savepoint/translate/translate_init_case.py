@@ -455,7 +455,7 @@ class TranslatePVarAuxiliaryPressureVars(TranslateDycoreFortranData2Py):
         return self.slice_output(inputs)
 
 class TranslateAquaplanet(TranslateDycoreFortranData2Py):
-    """ Translate the Fortran initialization for the Aquaplanet test case.
+    """ Translate the Fortran initialization for the Aquaplanet test case initialization.
     """
     def __init__(
         self,
@@ -540,4 +540,93 @@ class TranslateAquaplanet(TranslateDycoreFortranData2Py):
         inputs["u"] = dycore_state.u
         inputs["v"] = dycore_state.v
         inputs["w"] = dycore_state.w
+        return self.slice_output(inputs)
+
+class TranslateJablonowskiBaroclinicSteady(TranslateDycoreFortranData2Py):
+    """ Translate the Fortran initialization for the steady-state Baroclinic test case initialization.
+    """
+    def __init__(
+        self,
+        grid,
+        namelist: Namelist,
+        stencil_factory: StencilFactory,
+    ):
+        super().__init__(grid, namelist, stencil_factory)
+        self.in_vars["data_vars"] = {
+            "ps": {},
+            "delp": {},
+            "pe": {},
+            "peln": {},
+            "pk": {},
+            "pkz": {},
+            "eta": {"istart": 0, "iend": 0, "jstart": 0, "jend": 0},
+            "eta_v": {"istart": 0, "iend": 0, "jstart": 0, "jend": 0},
+            "ptop": {},
+        }
+        self.in_vars["parameters"] = []
+
+        self.out_vars = {
+            "u": grid.y3d_domain_dict(),
+            "v": grid.x3d_domain_dict(),
+            "w": {},
+            "phis": {},
+            "pt": {},
+            "delz": {
+                "istart": grid.is_,
+                "iend": grid.ie,
+                "jstart": grid.js,
+                "jend": grid.je,
+            },
+            "qvapor": {},
+            # TODO: Add these? utmpi=utmp vtmpi=vtmp eta=eta press=press
+        }
+        self.ignore_near_zero_errors = {}
+        self.max_error = 1e-13
+        self.stencil_factory = stencil_factory
+
+
+    def compute(self, inputs):
+        mpi_comm = NullComm(
+            rank=self.grid.rank,
+            total_ranks=6 * self.config.layout[0] * self.config.layout[1],
+        )
+        partitioner = CubedSpherePartitioner(TilePartitioner(self.config.layout))
+        communicator = CubedSphereCommunicator(mpi_comm, partitioner)
+        sizer = SubtileGridSizer.from_tile_params(
+            nx_tile=self.config.npx - 1,
+            ny_tile=self.config.npx - 1,
+            nz=self.config.npz,
+            n_halo=N_HALO_DEFAULT,
+            data_dimensions={},
+            layout=self.config.layout,
+            backend=self.stencil_factory.backend,
+        )
+        quantity_factory = QuantityFactory(sizer, backend=self.stencil_factory.backend)
+        metric_terms = MetricTerms(
+            quantity_factory=quantity_factory,
+            communicator=communicator,
+            grid_type=self.config.grid_type,
+            ak=self.grid.ak,
+            bk=self.grid.bk,
+        )
+
+        grid_data = GridData.new_from_metric_terms(metric_terms)
+        adiabatic = self.config.adiabatic
+        hydrostatic = self.config.hydrostatic
+        moist_phys = self.config.moist_phys
+        is_steady = True
+
+        # Main call being tested
+        dycore_state = baroclinic_init.init_baroclinic_state(
+            grid_data, quantity_factory, adiabatic, hydrostatic, moist_phys, communicator, is_steady
+        )
+
+        inputs["u"] = dycore_state.u
+        inputs["v"] = dycore_state.v
+        inputs["w"] = dycore_state.w
+        inputs["phis"] = dycore_state.phis
+        inputs["pt"] = dycore_state.pt
+        inputs["delp"] = dycore_state.delp
+        inputs["delz"] = dycore_state.delz
+        inputs["qvapor"] = dycore_state.qvapor
         return self.slice_output(inputs)
