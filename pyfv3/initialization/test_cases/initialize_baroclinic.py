@@ -372,7 +372,7 @@ def init_baroclinic_state(
         backend=sample_quantity.metadata.backend,
     )
 
-    comm.halo_update(state.phis, n_points=NHALO)
+    #comm.halo_update(state.phis, n_points=NHALO) # JK TODO: If we remove this from init, where would it make sense to put it? Or, should we add a flag to turn off halo updates to test easier?
 
     comm.vector_halo_update(state.u, state.v, n_points=NHALO)
 

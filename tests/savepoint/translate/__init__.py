@@ -61,6 +61,7 @@ from .translate_init_case import (
     TranslateInitCase,
     TranslateInitPreJab,
     TranslateJablonowskiBaroclinic,
+    TranslateJablonowskiBaroclinicInstability,
     TranslateJablonowskiBaroclinicSteady,
     TranslatePVarAuxiliaryPressureVars,
     TranslateAquaplanet,
